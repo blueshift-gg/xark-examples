@@ -44,14 +44,18 @@ number. You have to know the opening of a commitment someone published.
 just commit
 #    → paste the printed field element into circuit/Prover.toml as `commitment`
 
-# 2. Prove → export → build → deploy → submit
+# 2. Prove → export → build
 just prove
 just export
 just build-program
-solana program deploy program/target/deploy/age_verification_program.so
-cd client && npm install && PROGRAM_ID=<id> npm run submit
-#    → "Verified 18+ on-chain — no birthday revealed."
+
+# 3. Verify the proof in a real Solana VM (no deploy needed)
+cd ../e2e && cargo test age_verification
+#    → age_verification_verifies_on_chain ... ok
 ```
+
+To deploy to devnet, `solana program deploy` the `.so` and submit the 320-byte
+`instruction_data.bin` with any Solana client.
 
 ## From demo to production
 

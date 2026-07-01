@@ -1,16 +1,12 @@
-# DEPOSIT witness — example values for the FIRST deposit (index = 0) into an
-# empty tree. In practice the client fills these in (it reconstructs the
-# frontier and roots from on-chain `Deposit` events). See ../../RUNBOOK.md.
-#
-# All values below are PLACEHOLDERS — compute the real ones with the client or
-# the `just first-deposit-inputs` helper before proving.
+# DEPOSIT witness — first deposit (index 0) into an empty tree.
+# Values computed by the client (here: the index-0 test vector; secret=1,
+# nullifier=2). See ../../RUNBOOK.md.
 
-# Private: the left-sibling frontier. For index = 0 every path bit is 0, so the
-# frontier is unused and can be all zeros.
+# Private: left-sibling frontier. At index 0 every path bit is 0, so it's unused.
 filled_subtrees = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
 
-# Public inputs (order: old_root, new_root, leaf, index).
-old_root = "0"   # = zeros[H], the empty-tree root (a constant; compute once)
-new_root = "0"   # = root after inserting `leaf` at index 0
-leaf     = "0"   # = Poseidon2(nullifier, secret), your commitment
+# Public (order: old_root, new_root, leaf, index).
+old_root = "0x3039bcb20f03fd9c8650138ef2cfe643edeed152f9c20999f43aeed54d79e387"
+new_root = "0x2ef9fb3902aae449a8eeeef412f65f10eac3493a6e619106ad4c23d9c528b5a3"
+leaf     = "0x0dff6bc75a0964018049d6f7d67e6f07b7facff2d8639aa825e8b8208aacbbbd"
 index    = "0"

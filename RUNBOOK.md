@@ -3,10 +3,9 @@
 Everything you need to actually run the examples. If a command here disagrees with an example's
 `justfile`, the `justfile` wins (it's what runs).
 
-> Honesty note: these examples were authored against xark's real APIs and conventions but have
-> **not been compiled or deployed in this environment**. Expect to fix the occasional Noir/Anchor
-> syntax nit on first build. The three things most worth verifying against your live toolchain are
-> flagged as **⚠ CHECK** below.
+> All three examples are compiled, proved, and verified end-to-end by the LiteSVM suite in `e2e/`
+> (see §5). The items most worth re-confirming against your own toolchain are flagged as
+> **⚠ CHECK** below.
 
 ## 1. Prerequisites
 
@@ -16,10 +15,11 @@ Everything you need to actually run the examples. If a command here disagrees wi
 | `xark` CLI | current | `cargo install --path <your-xark-checkout>/crates/cli` |
 | Rust | 1.85+ | `rustup update` (edition 2024 support is required) |
 | Anza CLI (`cargo-build-sbf`, `solana`) | latest | https://docs.anza.xyz/cli/install |
-| Anchor | 0.31.1 (example 03 only) | `avm install 0.31.1 && avm use 0.31.1` |
-| Node | 20+ (clients) | any |
+| Anchor | 1.1 (example 03 only) | `avm install 1.1.2 && avm use 1.1.2` |
 | `just` | any | `cargo install just` |
 | `snarkjs` | optional | `npm i -g snarkjs` (browser/JS verification) |
+
+Versions in use: nargo `1.0.0-beta.22`, pinocchio `0.11`, anchor-lang `1.1`, litesvm `0.13`.
 
 Devnet wallet:
 
@@ -32,12 +32,15 @@ solana airdrop 2
 ## 2. The `xark-verifier` dependency (important, one-time)
 
 `xark export` generates a verifier crate whose `Cargo.toml` says `xark-verifier = "0.1"`. Until
-xark is published to crates.io, point that at your local checkout. Two ways:
+xark is published to crates.io, each program redirects it with a `[patch.crates-io]` block that
+**assumes xark is cloned as a sibling of this repo** (`…/GitHub/xark` next to `…/GitHub/xark-examples`):
 
-- **Per generated crate:** edit `circuit/target/<name>-xark-verifier/Cargo.toml`, replace
-  `xark-verifier = "0.1"` with `xark-verifier = { path = "/abs/path/to/xark/crates/verifier" }`.
-- **Workspace patch (example 03):** uncomment the `[patch.crates-io]` block in
-  `03-shielded-pool/program/Cargo.toml` and set the path.
+```toml
+[patch.crates-io]
+xark-verifier = { path = "../../../xark/crates/verifier" }
+```
+
+If your xark checkout lives elsewhere, edit that path in each program's `Cargo.toml`.
 
 ## 3. The pipeline, one command at a time
 
@@ -65,16 +68,16 @@ solana program deploy target/deploy/<name>.so     # note the printed program id
 cd program && anchor build && anchor deploy
 ```
 
-## 5. Submit a proof
+## 5. Verify / submit a proof
+
+To see any example verify on-chain **without a validator**, run the in-VM suite:
 
 ```bash
-# examples 01 / 02:
-cd client && npm install
-PROGRAM_ID=<id> npm run submit
-
-# example 03: use prepare-deposit / prepare-withdraw (writes Prover.toml + prints the
-# instruction args), prove, then submit via your Anchor client with the generated IDL.
+cd e2e && cargo test   # over_9000, age_verification, shielded_pool_full_flow — all pass
 ```
+
+To deploy for real, `solana program deploy` the `.so` and submit its `instruction_data.bin` (the
+exact instruction encodings + account metas for the pool are in `e2e/tests/pool.rs`).
 
 ## 6. Trusted setup: dev vs real
 
@@ -105,9 +108,9 @@ snarkjs groth16 verify \
 1. **Public-input order.** `xark inspect` prints the order the circuit exposes public inputs. It
    must match how each program concatenates them (documented at the top of every `program/src`).
    If they differ, reorder the program's `extend_from_slice` calls.
-2. **Poseidon2 lowering.** The circuits use `std::hash::poseidon2::Poseidon2::hash`. Confirm it
-   lowers to the `Poseidon2Permutation` black-box on your nargo (it does on beta.22). If a future
-   nargo changes this, switch to a permutation-based compression.
-3. **Client/circuit hash agreement (example 03).** The bb.js Poseidon2 in the client must equal the
-   circuit's. Pin `@aztec/bb.js` to your nargo's Barretenberg. Quick check: hash `[1, 2]` in both
-   and compare.
+2. **Poseidon2.** The circuits use `std::hash::poseidon2_permutation` (beta.22 exposes only the
+   permutation, not a high-level hash) — the same primitive xark supports as `Poseidon2Permutation`.
+   A future nargo that changes this lowering would need the construction revisited.
+3. **Off-chain input agreement (example 03).** Any tool that generates the pool's witness inputs
+   must reproduce the circuit's `poseidon2_permutation` construction exactly. The e2e test uses
+   nargo, so it is consistent by construction.

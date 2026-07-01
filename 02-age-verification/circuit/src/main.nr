@@ -1,23 +1,13 @@
-// Age verification — prove you're 18+ without revealing your birthday.
-//
-// The trust model (honest about it): an ISSUER commits, once, to your birth
-// year and publishes only the commitment:
-//
-//     commitment = Poseidon2::hash([birth_year, nonce])
-//
-// `nonce` is a random blinding value so the commitment can't be brute-forced
-// (there are only ~120 plausible birth years). Later, you — or anyone holding
-// the opening — can prove "age >= 18" against that public commitment as many
-// times as you like, revealing neither the birth year nor the nonce.
-//
-// Public inputs:  commitment, current_year   (declared in this order)
-// Private inputs: birth_year, nonce
-//
-// NOTE: we use the canonical `std::hash::poseidon2::Poseidon2::hash`, which
-// lowers to the `Poseidon2Permutation` black-box xark supports. If a future
-// nargo changes that lowering, swap in a permutation-based compression (see
-// ../README.md → "Poseidon compatibility").
-use std::hash::poseidon2::Poseidon2;
+// Prove age ≥ 18 against a public commitment to a birth year, revealing neither
+// the year nor the nonce. Public: commitment, current_year (this order).
+// Private: birth_year, nonce. (Trust model + walkthrough in the README.)
+
+// Fixed-arity Poseidon2 compression. beta.22 exposes only the permutation
+// publicly (xark's `Poseidon2Permutation` black-box); the client reproduces
+// this exact construction.
+fn hash2(a: Field, b: Field) -> Field {
+    std::hash::poseidon2_permutation([a, b, 0, 0])[0]
+}
 
 fn main(
     birth_year: u32,
@@ -26,7 +16,7 @@ fn main(
     current_year: pub u32,
 ) {
     // 1. Prove we know the opening of the published commitment.
-    let recomputed = Poseidon2::hash([birth_year as Field, nonce], 2);
+    let recomputed = hash2(birth_year as Field, nonce);
     assert(recomputed == commitment);
 
     // 2. Prove adulthood. u32 subtraction underflows if birth_year > current_year,
@@ -43,7 +33,7 @@ fn main(
 fn print_commitment() {
     let birth_year: Field = 1990;
     let nonce: Field = 424242424242;
-    let commitment = Poseidon2::hash([birth_year, nonce], 2);
+    let commitment = hash2(birth_year, nonce);
     println(commitment);
 }
 

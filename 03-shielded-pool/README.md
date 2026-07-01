@@ -49,8 +49,12 @@ withdraw:  client builds path (Noir Poseidon)    ─▶ withdraw proof ─▶ pr
 circuits/deposit/    proves a correct tree append           (public: old_root,new_root,leaf,index)
 circuits/withdraw/   proves membership + nullifier           (public: root,nullifier_hash,recipient*,relayer*,fee)
 program/             Anchor: verify both proofs, hold + pay lamports, track roots & nullifiers
-client/              Poseidon2 (via bb.js) + Merkle tree + note management; writes the Prover.toml files
 ```
+
+The full flow is proven end-to-end in [`../e2e/tests/pool.rs`](../e2e/tests/pool.rs):
+`cd ../e2e && cargo test shielded_pool_full_flow` runs init → deposit → withdraw →
+double-spend-rejected in LiteSVM. (The reference client is that Rust test — the earlier TypeScript
+client was removed.)
 
 Recipient and relayer are each split into two 128-bit halves (a Solana pubkey is 256-bit, larger
 than the BN254 field). Because they're public inputs, Groth16 binds them to the proof — so a
@@ -61,26 +65,23 @@ relayer can't redirect your withdrawal.
 Prerequisites and the one-time `xark-verifier` path setup are in [../RUNBOOK.md](../RUNBOOK.md).
 
 ```bash
-# 0. Deploy: build both verifiers, then the program
+# 1. Fill each circuit's Prover.toml with witness values. These are generated
+#    with nargo (same Poseidon as the circuit, so they always agree) — see the
+#    worked index-0 example in ../e2e/tests/pool.rs.
+
+# 2. Prove + export both circuits, then build the program
 just prove-deposit         # generates the deposit verifier crate
-just prove-withdraw        # generates the withdraw verifier crate  (uses placeholder inputs; ok for build)
+just prove-withdraw        # generates the withdraw verifier crate
 just build-program
 cd program && anchor deploy
 
-# 1. Initialize the pool with the empty-tree root
-just empty-root            # prints empty_root
-#    → call `initialize(denomination, empty_root)` (see program/tests or your client)
-
-# 2. Deposit
-just prepare-deposit       # new note + writes circuits/deposit/Prover.toml, prints commitment + new_root
-just prove-deposit         # real proof for your deposit
-#    → submit `deposit(commitment, new_root, proof)`; keep client/state/note-0.json SAFE
-
-# 3. Withdraw to a fresh address
-just prepare-withdraw client/state/note-0.json <recipient> <relayer> <fee>
-just prove-withdraw
-#    → submit `withdraw(proof, root, nullifier_hash, fee)` with recipient/relayer accounts
+# 3. Drive it: initialize(denomination, empty_root) → deposit(commitment, new_root,
+#    proof) → withdraw(proof, root, nullifier_hash, fee). The exact instruction
+#    encodings + account metas are in ../e2e/tests/pool.rs.
 ```
+
+Want to see it actually run first? `cd ../e2e && cargo test shielded_pool_full_flow` executes the
+entire deposit → withdraw flow (and a rejected double-spend) in an in-process Solana VM.
 
 ## What it does and doesn't give you
 
@@ -99,8 +100,9 @@ just prove-withdraw
 - Confirm the **public-input order** each circuit exposes with `xark inspect`, and that it matches
   the order `program/src/lib.rs` builds (`deposit`: old_root,new_root,leaf,index — `withdraw`:
   root,nullifier_hash,recipient_hi,recipient_lo,relayer_hi,relayer_lo,fee).
-- The client's Poseidon2 (bb.js) must match the circuit's. bb.js *is* Barretenberg, which Noir
-  hashes with — pin its version to your nargo. The RUNBOOK has a differential check.
+- The circuits use a fixed-arity Poseidon2 compression over `std::hash::poseidon2_permutation`
+  (beta.22 only exposes the permutation). Any off-chain input generator must reproduce it exactly —
+  the e2e test uses nargo, which is consistent by construction.
 - `ZERO` (empty leaf) is `0` here for clarity; a production pool uses a nothing-up-my-sleeve nonzero
   value so no real commitment can collide with an empty slot.
 

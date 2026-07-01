@@ -51,19 +51,22 @@ just prove
 # 2. Generate the on-chain verifier crate (VK baked in)
 just export
 
-# 3. Build + deploy the program, then submit the proof
+# 3. Build the program
 just build-program
-solana program deploy program/target/deploy/over_9000_program.so   # note the program id
-cd client && npm install && PROGRAM_ID=<id> npm run submit
-# Expect: "It's over 9000! Proof verified on-chain."
+
+# 4. Verify the proof in a real Solana VM (no deploy needed)
+cd ../e2e && cargo test over_9000
+# Expect: over_9000_verifies_on_chain ... ok
 ```
+
+To deploy to devnet, `solana program deploy` the `.so` and submit the 256-byte
+`instruction_data.bin` with any Solana client.
 
 ## Files
 
 ```
 circuit/          the Noir circuit (src/main.nr), inputs (Prover.toml)
 program/          Pinocchio on-chain verifier — one verify call, minimal CU
-client/           submit the proof to devnet (TypeScript)
 justfile          the pipeline: prove · export · build-program
 ```
 

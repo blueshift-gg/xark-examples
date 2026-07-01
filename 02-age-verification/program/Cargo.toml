@@ -8,13 +8,16 @@ publish = false
 
 [workspace]
 
+# xark-verifier isn't published yet; assumes xark is cloned as a sibling repo.
+[patch.crates-io]
+xark-verifier = { path = "../../../xark/crates/verifier" }
+
 [lib]
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
 age_verification_xark_verifier = { path = "../circuit/target/age_verification-xark-verifier", package = "age-verification-xark-verifier" }
-pinocchio = "0.8"
-solana-program-error = { version = "3", default-features = false }
+pinocchio = "0.11"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [

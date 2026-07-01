@@ -1,29 +1,26 @@
-//! Shielded pool — on-chain program (Anchor).
+//! Shielded pool — on-chain program (Anchor). The chain never hashes: it stores
+//! a ring of recent Merkle roots, `next_index`, and one marker account per spent
+//! nullifier, and verifies the deposit/withdraw proofs (via the crates
+//! `xark export` generated). Public inputs are 32-byte little-endian, appended
+//! to the 256-byte proof in each circuit's declared order.
 //!
-//! The chain never hashes. It stores only a ring of recent Merkle roots, a
-//! `next_index`, and one marker account per spent nullifier. All Poseidon
-//! lives in the two Noir circuits (`deposit`, `withdraw`); the program's whole
-//! job is to verify their proofs (via the crates `xark export` generated) and
-//! move lamports.
-//!
-//! Wire format reminder: xark public inputs are 32-byte **little-endian** field
-//! elements. Each `instruction_data` we build is `proof (256 B) || public
-//! inputs`, in the exact order the corresponding circuit declares them.
-//!
-//! ⚠️ Reference implementation — unaudited, educational. Do not deploy to
-//! mainnet as-is. See ../../../README.md.
+//! ⚠️ Reference implementation — unaudited, educational. See the README.
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
 use shielded_pool_deposit_xark_verifier as deposit_verifier;
 use shielded_pool_withdraw_xark_verifier as withdraw_verifier;
 
-declare_id!("Sh1e1dedPoo1111111111111111111111111111111");
+// Placeholder program id — replace with yours via `anchor keys sync`.
+declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
-const ROOT_HISTORY_SIZE: usize = 64;
+const ROOT_HISTORY_SIZE: usize = 16;
 const TREE_HEIGHT: u32 = 20;
 const FR: usize = 32;
 const PROOF_LEN: usize = 256;
+
+const POOL_SEED: &[u8] = b"pool";
+const NULLIFIER_SEED: &[u8] = b"nullifier";
 
 #[program]
 pub mod shielded_pool {
@@ -38,7 +35,7 @@ pub mod shielded_pool {
         pool.denomination = denomination;
         pool.next_index = 0;
         pool.current_root_index = 0;
-        pool.roots = [[0u8; 32]; ROOT_HISTORY_SIZE];
+        // `init` already zeroed the account, so `roots` is all-zero; just set root 0.
         pool.roots[0] = empty_root;
         pool.bump = ctx.bumps.pool;
         Ok(())
@@ -79,7 +76,7 @@ pub mod shielded_pool {
         // Pull the fixed denomination from the depositor into the pool PDA.
         system_program::transfer(
             CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
+                ctx.accounts.system_program.key(),
                 system_program::Transfer {
                     from: ctx.accounts.depositor.to_account_info(),
                     to: ctx.accounts.pool.to_account_info(),
@@ -155,8 +152,8 @@ pub mod shielded_pool {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = authority, space = 8 + Pool::SIZE, seeds = [b"pool"], bump)]
-    pub pool: Account<'info, Pool>,
+    #[account(init, payer = authority, space = 8 + Pool::INIT_SPACE, seeds = [POOL_SEED], bump)]
+    pub pool: Box<Account<'info, Pool>>,
     #[account(mut)]
     pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -164,8 +161,8 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
-    #[account(mut, seeds = [b"pool"], bump = pool.bump)]
-    pub pool: Account<'info, Pool>,
+    #[account(mut, seeds = [POOL_SEED], bump = pool.bump)]
+    pub pool: Box<Account<'info, Pool>>,
     #[account(mut)]
     pub depositor: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -174,14 +171,14 @@ pub struct Deposit<'info> {
 #[derive(Accounts)]
 #[instruction(proof: Vec<u8>, root: [u8; 32], nullifier_hash: [u8; 32])]
 pub struct Withdraw<'info> {
-    #[account(mut, seeds = [b"pool"], bump = pool.bump)]
-    pub pool: Account<'info, Pool>,
+    #[account(mut, seeds = [POOL_SEED], bump = pool.bump)]
+    pub pool: Box<Account<'info, Pool>>,
     /// Marker account; creation fails if this nullifier was already spent.
     #[account(
         init,
         payer = relayer,
         space = 8,
-        seeds = [b"nullifier", nullifier_hash.as_ref()],
+        seeds = [NULLIFIER_SEED, nullifier_hash.as_ref()],
         bump
     )]
     pub nullifier: Account<'info, Nullifier>,
@@ -196,6 +193,7 @@ pub struct Withdraw<'info> {
 // ---- State ------------------------------------------------------------------
 
 #[account]
+#[derive(InitSpace)]
 pub struct Pool {
     pub authority: Pubkey,
     pub denomination: u64,
@@ -203,10 +201,6 @@ pub struct Pool {
     pub current_root_index: u32,
     pub roots: [[u8; 32]; ROOT_HISTORY_SIZE],
     pub bump: u8,
-}
-
-impl Pool {
-    pub const SIZE: usize = 32 + 8 + 4 + 4 + (32 * ROOT_HISTORY_SIZE) + 1;
 }
 
 #[account]

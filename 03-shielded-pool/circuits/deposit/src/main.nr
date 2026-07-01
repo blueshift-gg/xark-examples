@@ -1,28 +1,12 @@
-// Shielded pool — DEPOSIT circuit.
-//
-// The insight that makes this design clean: the Solana program never hashes.
-// It stores only { current_root, next_index, recent-roots ring }. To add a
-// commitment to the tree, the depositor proves — in Noir — that a `new_root`
-// is the correct result of appending `leaf` at `index` to the tree the chain
-// currently roots at `old_root`. Because ALL Poseidon happens here (and in the
-// withdraw circuit), the circuit and chain can never disagree about hashes.
-//
-// How the depositor knows `filled_subtrees` (the frontier / left-siblings along
-// the insertion path): they reconstruct it from the public `Deposit` events —
-// every commitment ever inserted is on-chain. A wrong frontier can't pass the
-// `old_root` check below (that would require a Poseidon collision).
-//
-// Public inputs (IN THIS ORDER — the program builds them identically):
-//   old_root, new_root, leaf, index
-// Private inputs:
-//   filled_subtrees
-//
-// Verify the ordering against `xark inspect` before wiring up the program.
+// Shielded pool — DEPOSIT circuit. Proves `new_root` is the correct result of
+// appending `leaf` at `index` to the tree rooted at `old_root` — so the Solana
+// program never hashes (all Poseidon lives in the circuits, keeping circuit and
+// chain consistent by construction). The private `filled_subtrees` frontier is
+// pinned by the `old_root` check. Public inputs, in order: old_root, new_root,
+// leaf, index. (Design walkthrough in the README.)
 
-use std::hash::poseidon2::Poseidon2;
-
-global H: u32 = 20; // tree height → 2^20 = 1,048,576 leaves
-global ZERO: Field = 0; // empty-leaf sentinel (see README: production uses a nonzero NUMS value)
+global H: u32 = 20; // tree height → 2^20 leaves
+global ZERO: Field = 0; // empty-leaf sentinel (README: production uses a nonzero NUMS value)
 
 fn main(
     filled_subtrees: [Field; H],
@@ -43,8 +27,11 @@ fn main(
     assert(recomputed_new == new_root);
 }
 
+// Fixed-arity 2-to-1 compression over the public Poseidon2 permutation (width
+// 4). beta.22 exposes only the permutation; this is the primitive xark supports
+// as `Poseidon2Permutation`. The client reproduces the identical construction.
 fn hash2(l: Field, r: Field) -> Field {
-    Poseidon2::hash([l, r], 2)
+    std::hash::poseidon2_permutation([l, r, 0, 0])[0]
 }
 
 // Root of the tree when position `index` holds `leaf`, everything after it is

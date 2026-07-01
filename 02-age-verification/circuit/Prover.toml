@@ -8,5 +8,5 @@ nonce = "424242424242"
 #     just commit        # runs `nargo test --show-output print_commitment`
 # then paste the printed field element here. (It's the Poseidon2 hash of
 # [birth_year, nonce], computed with Noir's own hash so params always match.)
-commitment = "0"
+commitment = "0x170d75fd1c83586dae043be180b24ec53c131e9d342057d3cec6806a57411a81"
 current_year = "2026"

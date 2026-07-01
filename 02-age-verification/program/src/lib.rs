@@ -1,25 +1,22 @@
-//! On-chain verifier for the age-verification circuit.
-//!
-//! Instruction data: `proof (256 B) || commitment (32 B) || current_year (32 B)`.
-//! Public inputs are 32-byte **little-endian** field elements, in the order the
-//! circuit declares its `pub` params: `[commitment, current_year]`.
-//!
-//! This program demonstrates *consuming* a public input: it reads
-//! `current_year` and sanity-checks it. A production deployment would go
-//! further (see README): compare `current_year` against the on-chain `Clock`,
-//! and check `commitment` against a trusted issuer-registry account so that
-//! only credentials from a real issuer are accepted.
-#![cfg_attr(any(target_os = "solana", target_arch = "bpf"), no_std)]
+//! On-chain verifier for the age-verification circuit (Pinocchio).
+//! Instruction data: proof (256 B) || commitment (32 B) || current_year (32 B).
+//! Public inputs are 32-byte little-endian, in `pub`-declaration order. Reading
+//! current_year here shows public-input parsing; a real deployment would also
+//! check the Clock and a trusted issuer registry (see README).
+#![cfg_attr(not(test), no_std)]
 
 use age_verification_xark_verifier as verifier;
-use pinocchio::{account::AccountView, address::Address, entrypoint, ProgramResult};
-use solana_program_error::ProgramError;
+use pinocchio::{error::ProgramError, program_entrypoint, AccountView, Address, ProgramResult};
 
 const PROOF_LEN: usize = 256;
 const FR: usize = 32;
 const N_PUBLIC: usize = 2; // commitment, current_year
 
-entrypoint!(process_instruction);
+program_entrypoint!(process_instruction);
+#[cfg(not(test))]
+pinocchio::nostd_panic_handler!();
+#[cfg(not(test))]
+pinocchio::no_allocator!();
 
 fn process_instruction(
     _program_id: &Address,

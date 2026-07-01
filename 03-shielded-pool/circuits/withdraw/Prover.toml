@@ -1,18 +1,40 @@
-# WITHDRAW witness — PLACEHOLDERS. The client generates these from your saved
-# note (secret, nullifier) and the Merkle path it rebuilds from `Deposit`
-# events. See ../../RUNBOOK.md.
+# WITHDRAW witness — spend leaf 0 (secret=1, nullifier=2). Values from the
+# client; here the index-0 test vector. recipient/relayer are the committed
+# test keypairs; fee = 0. See ../../RUNBOOK.md.
 
 # Private
-secret    = "0"
-nullifier = "0"
-path_elements = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
-path_indices  = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+secret    = "1"
+nullifier = "2"
+# Authentication path for leaf 0: every sibling is an empty subtree (zeros[i]).
+path_elements = [
+  "0x00",
+  "0x18dfb8dc9b82229cff974efefc8df78b1ce96d9d844236b496785c698bc6732e",
+  "0x2c0d184fc7a25c124a27a67b2c46220b039b1a5072c3b693a18ffee458f6425d",
+  "0x268b2b93ac5fe540e618a378b8a71b8f2407232744d71e501ce8699980b306e5",
+  "0x2d436f654e14cc4febcafdf4a753b149dd8c88a75df9e5d6707e83a853b5f791",
+  "0x0b66fdef5a7f00f6fb45d1498b4d7131218e69ccf0a2751b6a1fb1bcd982867d",
+  "0x1d542b476c671bb6f0d2ab2939335d7cbad03476f1e3bcba70973b1adfe88b91",
+  "0x0680c6388c5798caf80642a1e84316b8b2f7caa99da076f3057d2962a46c5358",
+  "0x03c53ce5296e3e895171f89aa09f84214e3fb0755fe7a423b87888e4b3d731b8",
+  "0x2dd4e2510b33275359bba6edf72e6bdacad259950b024b2cc19d63c3a5b761df",
+  "0x11cb221f69d954d521fb5393767e77fe4d14133757a706b318e62fa984f98157",
+  "0x039d78bac8f890788eefe39af15eee5825056648f99210054fd03c25213f4de7",
+  "0x0c55b828a83062a77d2b3e0a66bbb50cb6040990d9f368da8b24c0e82b692349",
+  "0x24c866ac88715851268d808487e20e6986084fc222d7188e2a8e0f5b9f8457ef",
+  "0x0f6a94e437b9dfb35cdedf41e2e154c3ae449b7c04c13add0996a7b53cde5400",
+  "0x22afe7696b87cb782742e2d3ecb0f749a9beefbbb2159d178b09000e55b22cab",
+  "0x121b01164d32e9ab841ba8f5602b0ec58b576e62552c96911d4d988d49468cdd",
+  "0x05f3810707b1336c953b7db191215dab2b5772f93025aa345b954b43135b627b",
+  "0x287515b2d5975c74e3fd85a20d68611a463ffe605a1c54d8140ab16d1b77f57b",
+  "0x276ff13fde3afa1adb26149ddc3aa67240d603b6a91da5e494c8e58706381a38",
+]
+path_indices = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
 
 # Public (order: root, nullifier_hash, recipient_hi, recipient_lo, relayer_hi, relayer_lo, fee)
-root           = "0"
-nullifier_hash = "0"
-recipient_hi   = "0"
-recipient_lo   = "0"
-relayer_hi     = "0"
-relayer_lo     = "0"
+root           = "0x2ef9fb3902aae449a8eeeef412f65f10eac3493a6e619106ad4c23d9c528b5a3"
+nullifier_hash = "0x01fc64bed90c55b193ec54e851cd13888d45293f2a2e4efdf83581f39df9c615"
+recipient_hi   = "58256726482584629441546286265625466004"
+recipient_lo   = "112802383440504508271205606172350790537"
+relayer_hi     = "308783910004703087532718502465021824601"
+relayer_lo     = "234650117546755895473422914524404314203"
 fee            = "0"

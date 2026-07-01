@@ -16,13 +16,17 @@ publish = false
 # lock (the generated verifier crate lives under circuit/target/).
 [workspace]
 
+# xark-verifier is not yet published to crates.io. This assumes xark is cloned
+# as a sibling of this repo (~/…/GitHub/xark and ~/…/GitHub/xark-examples).
+[patch.crates-io]
+xark-verifier = { path = "../../../xark/crates/verifier" }
+
 [lib]
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
 over_9000_xark_verifier = { path = "../circuit/target/over_9000-xark-verifier", package = "over-9000-xark-verifier" }
-pinocchio = "0.8"
-solana-program-error = { version = "3", default-features = false }
+pinocchio = "0.11"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [

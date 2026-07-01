@@ -1,35 +1,19 @@
 # shielded-pool — two circuits (deposit, withdraw) + one Anchor program.
-# See ../RUNBOOK.md for prerequisites and the xark-verifier path setup.
+# Fill each circuit's Prover.toml first (see ../RUNBOOK.md for how inputs are
+# generated; the e2e test uses a worked example). Then:
 
 set shell := ["bash", "-uc"]
 
-# One-time: print the empty-tree root to pass to the program's `initialize`.
-empty-root:
-    cd client && npm install --silent && npm run empty-root
-
-# --- DEPOSIT ---------------------------------------------------------------
-
-# 1) new note + compute commitment/new_root/frontier → writes deposit Prover.toml
-prepare-deposit:
-    cd client && npm install --silent && npm run prepare-deposit
-
-# 2) prove the deposit circuit and export its on-chain verifier crate
+# Prove + export the DEPOSIT circuit.
 prove-deposit:
     cd circuits/deposit && nargo execute
-    cd circuits/deposit && xark inspect       # confirm public-input order!
+    cd circuits/deposit && xark inspect       # confirm public-input order
     cd circuits/deposit && xark setup --insecure-dev-mode
     cd circuits/deposit && xark prove
     cd circuits/deposit && xark verify
     cd circuits/deposit && xark export --crate-name shielded-pool-deposit-xark-verifier
 
-# --- WITHDRAW --------------------------------------------------------------
-
-# 1) rebuild the Merkle path for your note → writes withdraw Prover.toml
-#    usage: just prepare-withdraw client/state/note-0.json <recipient> <relayer> <fee>
-prepare-withdraw NOTE RECIPIENT RELAYER FEE:
-    cd client && npm install --silent && npm run prepare-withdraw -- "{{NOTE}}" "{{RECIPIENT}}" "{{RELAYER}}" "{{FEE}}"
-
-# 2) prove the withdraw circuit and export its on-chain verifier crate
+# Prove + export the WITHDRAW circuit.
 prove-withdraw:
     cd circuits/withdraw && nargo execute
     cd circuits/withdraw && xark inspect
@@ -38,13 +22,10 @@ prove-withdraw:
     cd circuits/withdraw && xark verify
     cd circuits/withdraw && xark export --crate-name shielded-pool-withdraw-xark-verifier
 
-# --- PROGRAM ---------------------------------------------------------------
-
-# Build the Anchor program. Run prove-deposit AND prove-withdraw first (they
+# Build the Anchor program (run prove-deposit AND prove-withdraw first — they
 # generate the two verifier crates the program depends on).
 build-program:
-    cd program && anchor build
+    cd program && cargo build-sbf
 
 clean:
-    rm -rf circuits/deposit/target circuits/withdraw/target program/target \
-           program/.anchor client/node_modules client/state
+    rm -rf circuits/deposit/target circuits/withdraw/target program/target program/.anchor

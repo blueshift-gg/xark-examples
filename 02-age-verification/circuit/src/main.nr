@@ -39,13 +39,12 @@ fn print_commitment() {
 
 #[test]
 fn adult_passes() {
-    // 2026 - 1990 = 36 >= 18. Uses the commitment printed by `print_commitment`.
-    // (Replace the commitment literal after computing it locally.)
-    // main(1990, 424242424242, <commitment>, 2026);
+    // 2026 - 1990 = 36 >= 18
+    main(1990, 424242424242, 0x170d75fd1c83586dae043be180b24ec53c131e9d342057d3cec6806a57411a81, 2026);
 }
 
 #[test(should_fail)]
 fn minor_fails() {
-    // 2026 - 2020 = 6 < 18  → must fail. (commitment must match [2020, nonce].)
-    // main(2020, 424242424242, <commitment_for_2020>, 2026);
+    // 2026 - 2020 = 6 < 18 → the age assert must fail (commitment matches [2020, nonce])
+    main(2020, 424242424242, 0x15b6779b81d216e762da8e8650dc797e98b98371b6e83434839c8a3e3ad58a68, 2026);
 }

@@ -17,6 +17,10 @@ fn main(
 ) {
     let zeros = zeros_array();
 
+    // Guard: index must fit the tree — root_with_leaf consumes only the low H
+    // bits, so without this a caller could silently alias a high index.
+    assert(index < 1048576); // 2^H, H = 20
+
     // 1. Bind the private frontier to the chain's current root. Only the true
     //    frontier reproduces `old_root` (collision resistance of Poseidon2).
     let recomputed_old = root_with_leaf(ZERO, index, filled_subtrees, zeros);
@@ -63,4 +67,34 @@ fn zeros_array() -> [Field; H] {
         z[i] = hash2(z[i - 1], z[i - 1]);
     }
     z
+}
+
+#[test]
+fn deposit_valid() {
+    let leaf = 12345;
+    let zeros = zeros_array();
+    let filled: [Field; H] = [0; H];
+    let old_root = root_with_leaf(ZERO, 0, filled, zeros);
+    let new_root = root_with_leaf(leaf, 0, filled, zeros);
+    main(filled, old_root, new_root, leaf, 0);
+}
+
+#[test(should_fail)]
+fn deposit_wrong_new_root() {
+    let leaf = 12345;
+    let zeros = zeros_array();
+    let filled: [Field; H] = [0; H];
+    let old_root = root_with_leaf(ZERO, 0, filled, zeros);
+    let new_root = root_with_leaf(leaf, 0, filled, zeros);
+    main(filled, old_root, new_root + 1, leaf, 0);
+}
+
+#[test(should_fail)]
+fn deposit_wrong_old_root() {
+    let leaf = 12345;
+    let zeros = zeros_array();
+    let filled: [Field; H] = [0; H];
+    let old_root = root_with_leaf(ZERO, 0, filled, zeros);
+    let new_root = root_with_leaf(leaf, 0, filled, zeros);
+    main(filled, old_root + 1, new_root, leaf, 0);
 }

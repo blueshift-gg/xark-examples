@@ -1,12 +1,12 @@
 [toolchain]
-anchor_version = "0.31.1"
+anchor_version = "1.1.2"
 
 [features]
 resolution = true
 skip-lint = false
 
 [programs.devnet]
-shielded_pool = "Sh1e1dedPoo1111111111111111111111111111111"
+shielded_pool = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
 
 [registry]
 url = "https://api.apr.dev"
@@ -15,5 +15,5 @@ url = "https://api.apr.dev"
 cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
+# Tests live in the workspace's e2e/ crate (LiteSVM): `cd ../../e2e && cargo test`.
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

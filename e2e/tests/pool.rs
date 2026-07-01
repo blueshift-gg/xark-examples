@@ -1,15 +1,14 @@
 //! Full shielded-pool flow in an in-process Solana VM (LiteSVM):
-//! initialize -> deposit (with the deposit proof) -> withdraw (with the withdraw
-//! proof) to a fresh recipient. Asserts the recipient is paid and that a second
-//! withdraw with the same nullifier fails (double-spend protection).
-//!
-//! All field bytes are read straight from the exported `*.solana.bin` artifacts
-//! so the on-chain public inputs match the proofs exactly. Requires the pool
-//! built per ../RUNBOOK.md (both circuits proved+exported, program built).
+//! initialize -> deposit -> withdraw, plus the program's rejection paths.
+//! All field bytes come from the exported `*.solana.bin` artifacts so the
+//! on-chain public inputs match the proofs exactly. Requires the pool built per
+//! ../RUNBOOK.md.
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use litesvm::LiteSVM;
+use litesvm::types::TransactionResult;
+use sha2::{Digest, Sha256};
 use solana_address::Address;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
@@ -19,11 +18,6 @@ use solana_transaction::Transaction;
 
 const PROGRAM_ID: &str = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS";
 const DENOMINATION: u64 = 1_000_000_000; // 1 SOL
-
-// Anchor discriminators = sha256("global:<name>")[..8].
-const DISC_INITIALIZE: [u8; 8] = [175, 175, 109, 31, 13, 152, 155, 237];
-const DISC_DEPOSIT: [u8; 8] = [242, 35, 198, 137, 82, 225, 242, 182];
-const DISC_WITHDRAW: [u8; 8] = [183, 18, 70, 156, 148, 109, 161, 34];
 
 // Test keypairs bound into the withdraw proof (see circuits/withdraw/Prover.toml).
 const RELAYER: [u8; 64] = [
@@ -39,44 +33,68 @@ const RECIPIENT: [u8; 64] = [
     211, 43,
 ];
 
-fn root() -> PathBuf {
+/// Anchor instruction discriminator = sha256("global:<name>")[..8].
+fn disc(name: &str) -> [u8; 8] {
+    Sha256::digest(format!("global:{name}").as_bytes())[..8].try_into().unwrap()
+}
+
+fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
 }
 fn read(rel: &str) -> Vec<u8> {
-    let p = root().join(rel);
+    let p = repo_root().join(rel);
     std::fs::read(&p).unwrap_or_else(|e| panic!("missing {}: {e}", p.display()))
 }
 fn chunk32(bytes: &[u8], i: usize) -> [u8; 32] {
     bytes[i * 32..i * 32 + 32].try_into().unwrap()
 }
-
 fn borsh_bytes(v: &[u8]) -> Vec<u8> {
     let mut out = (v.len() as u32).to_le_bytes().to_vec();
     out.extend_from_slice(v);
     out
 }
+fn send(svm: &mut LiteSVM, ix: Instruction, signer: &Keypair) -> TransactionResult {
+    let msg = Message::new(&[ix], Some(&signer.pubkey()));
+    let tx = Transaction::new(&[signer], msg, svm.latest_blockhash());
+    svm.send_transaction(tx)
+}
 
-#[test]
-fn shielded_pool_full_flow() {
+const DEPOSIT_DIR: &str =
+    "03-shielded-pool/circuits/deposit/target/shielded_pool_deposit-xark-verifier";
+const WITHDRAW_DIR: &str =
+    "03-shielded-pool/circuits/withdraw/target/shielded_pool_withdraw-xark-verifier";
+
+/// A pool that's been initialized and has one deposit, ready to withdraw.
+struct Pool {
+    svm: LiteSVM,
+    program_id: Address,
+    system: Address,
+    pool: Address,
+    relayer: Keypair,
+    recipient: Keypair,
+    withdraw_proof: Vec<u8>,
+    w_root: [u8; 32],
+    nullifier_hash: [u8; 32],
+}
+
+fn setup() -> Pool {
     let program_id = Address::from_str(PROGRAM_ID).unwrap();
     let system = Address::from_str("11111111111111111111111111111111").unwrap();
 
-    let deposit_dir = "03-shielded-pool/circuits/deposit/target/shielded_pool_deposit-xark-verifier";
-    let withdraw_dir =
-        "03-shielded-pool/circuits/withdraw/target/shielded_pool_withdraw-xark-verifier";
-
-    // Deposit public inputs: [old_root, new_root, commitment, index] (LE 32B each).
-    let dpi = read(&format!("{deposit_dir}/public_inputs.solana.bin"));
-    let empty_root = chunk32(&dpi, 0); // == old_root of the first deposit
+    // Deposit public inputs: [old_root, new_root, commitment, index].
+    let dpi = read(&format!("{DEPOSIT_DIR}/public_inputs.solana.bin"));
+    assert_eq!(dpi.len(), 4 * 32, "deposit must expose 4 public inputs");
+    let empty_root = chunk32(&dpi, 0);
     let new_root = chunk32(&dpi, 1);
     let commitment = chunk32(&dpi, 2);
-    let deposit_proof = read(&format!("{deposit_dir}/proof.solana.bin"));
+    let deposit_proof = read(&format!("{DEPOSIT_DIR}/proof.solana.bin"));
 
     // Withdraw public inputs: [root, nullifier_hash, r_hi, r_lo, l_hi, l_lo, fee].
-    let wpi = read(&format!("{withdraw_dir}/public_inputs.solana.bin"));
+    let wpi = read(&format!("{WITHDRAW_DIR}/public_inputs.solana.bin"));
+    assert_eq!(wpi.len(), 7 * 32, "withdraw must expose 7 public inputs");
     let w_root = chunk32(&wpi, 0);
     let nullifier_hash = chunk32(&wpi, 1);
-    let withdraw_proof = read(&format!("{withdraw_dir}/proof.solana.bin"));
+    let withdraw_proof = read(&format!("{WITHDRAW_DIR}/proof.solana.bin"));
     assert_eq!(w_root, new_root, "withdraw root must equal the deposit's new root");
 
     let mut svm = LiteSVM::new();
@@ -85,7 +103,6 @@ fn shielded_pool_full_flow() {
 
     let authority = Keypair::new();
     let depositor = Keypair::new();
-    // The keypair's 32-byte seed is the first half of the 64-byte secret key.
     let relayer = Keypair::new_from_array(RELAYER[..32].try_into().unwrap());
     let recipient = Keypair::new_from_array(RECIPIENT[..32].try_into().unwrap());
     for kp in [&authority, &depositor, &relayer] {
@@ -93,76 +110,145 @@ fn shielded_pool_full_flow() {
     }
 
     let (pool, _) = Address::find_program_address(&[b"pool"], &program_id);
-    let (nullifier, _) =
-        Address::find_program_address(&[b"nullifier", &nullifier_hash], &program_id);
 
-    let send = |svm: &mut LiteSVM, ix: Instruction, signers: &[&Keypair]| {
-        let msg = Message::new(&[ix], Some(&signers[0].pubkey()));
-        let tx = Transaction::new(signers, msg, svm.latest_blockhash());
-        svm.send_transaction(tx)
-    };
-
-    // 1. initialize(denomination, empty_root)
-    let mut data = DISC_INITIALIZE.to_vec();
+    // initialize(denomination, empty_root)
+    let mut data = disc("initialize").to_vec();
     data.extend_from_slice(&DENOMINATION.to_le_bytes());
     data.extend_from_slice(&empty_root);
-    let ix = Instruction {
-        program_id,
-        accounts: vec![
-            AccountMeta::new(pool, false),
-            AccountMeta::new(authority.pubkey(), true),
-            AccountMeta::new_readonly(system, false),
-        ],
-        data,
-    };
-    send(&mut svm, ix, &[&authority]).expect("initialize");
+    send(
+        &mut svm,
+        Instruction {
+            program_id,
+            accounts: vec![
+                AccountMeta::new(pool, false),
+                AccountMeta::new(authority.pubkey(), true),
+                AccountMeta::new_readonly(system, false),
+            ],
+            data,
+        },
+        &authority,
+    )
+    .expect("initialize");
 
-    // 2. deposit(commitment, new_root, proof)
-    let mut data = DISC_DEPOSIT.to_vec();
+    // deposit(commitment, new_root, proof)
+    let mut data = disc("deposit").to_vec();
     data.extend_from_slice(&commitment);
     data.extend_from_slice(&new_root);
     data.extend_from_slice(&borsh_bytes(&deposit_proof));
-    let ix = Instruction {
-        program_id,
+    send(
+        &mut svm,
+        Instruction {
+            program_id,
+            accounts: vec![
+                AccountMeta::new(pool, false),
+                AccountMeta::new(depositor.pubkey(), true),
+                AccountMeta::new_readonly(system, false),
+            ],
+            data,
+        },
+        &depositor,
+    )
+    .expect("deposit");
+
+    Pool { svm, program_id, system, pool, relayer, recipient, withdraw_proof, w_root, nullifier_hash }
+}
+
+/// Build a withdraw instruction, allowing each field to be overridden for the
+/// negative tests.
+fn withdraw_ix(
+    p: &Pool,
+    proof: &[u8],
+    root: [u8; 32],
+    nullifier_hash: [u8; 32],
+    fee: u64,
+    recipient: Address,
+) -> Instruction {
+    let (nullifier, _) =
+        Address::find_program_address(&[b"nullifier", &nullifier_hash], &p.program_id);
+    let mut data = disc("withdraw").to_vec();
+    data.extend_from_slice(&borsh_bytes(proof));
+    data.extend_from_slice(&root);
+    data.extend_from_slice(&nullifier_hash);
+    data.extend_from_slice(&fee.to_le_bytes());
+    Instruction {
+        program_id: p.program_id,
         accounts: vec![
-            AccountMeta::new(pool, false),
-            AccountMeta::new(depositor.pubkey(), true),
-            AccountMeta::new_readonly(system, false),
+            AccountMeta::new(p.pool, false),
+            AccountMeta::new(nullifier, false),
+            AccountMeta::new(recipient, false),
+            AccountMeta::new(p.relayer.pubkey(), true),
+            AccountMeta::new_readonly(p.system, false),
         ],
         data,
-    };
-    send(&mut svm, ix, &[&depositor]).expect("deposit");
+    }
+}
 
-    // 3. withdraw(proof, root, nullifier_hash, fee=0) → pays recipient
-    let recipient_before = svm.get_balance(&recipient.pubkey()).unwrap_or(0);
-    let mut data = DISC_WITHDRAW.to_vec();
-    data.extend_from_slice(&borsh_bytes(&withdraw_proof));
-    data.extend_from_slice(&w_root);
-    data.extend_from_slice(&nullifier_hash);
-    data.extend_from_slice(&0u64.to_le_bytes()); // fee
-    let withdraw_ix = || Instruction {
-        program_id,
-        accounts: vec![
-            AccountMeta::new(pool, false),
-            AccountMeta::new(nullifier, false),
-            AccountMeta::new(recipient.pubkey(), false),
-            AccountMeta::new(relayer.pubkey(), true),
-            AccountMeta::new_readonly(system, false),
-        ],
-        data: data.clone(),
-    };
-    send(&mut svm, withdraw_ix(), &[&relayer]).expect("withdraw");
+#[test]
+fn shielded_pool_full_flow() {
+    let mut p = setup();
+    let before = p.svm.get_balance(&p.recipient.pubkey()).unwrap_or(0);
 
-    let recipient_after = svm.get_balance(&recipient.pubkey()).unwrap_or(0);
-    assert_eq!(
-        recipient_after - recipient_before,
-        DENOMINATION,
-        "recipient should receive the full denomination",
+    let ix = withdraw_ix(&p, &p.withdraw_proof, p.w_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    let relayer = p.relayer.insecure_clone();
+    send(&mut p.svm, ix, &relayer).expect("withdraw");
+
+    let after = p.svm.get_balance(&p.recipient.pubkey()).unwrap_or(0);
+    assert_eq!(after - before, DENOMINATION, "recipient receives the full denomination");
+
+    // Double-spend: same nullifier must fail.
+    let ix = withdraw_ix(&p, &p.withdraw_proof, p.w_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    assert!(send(&mut p.svm, ix, &relayer).is_err(), "double-spend must be rejected");
+}
+
+#[test]
+fn withdraw_rejects_unknown_root() {
+    let mut p = setup();
+    let bad_root = [9u8; 32];
+    let ix = withdraw_ix(&p, &p.withdraw_proof, bad_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    let relayer = p.relayer.insecure_clone();
+    assert!(send(&mut p.svm, ix, &relayer).is_err(), "unknown root must be rejected");
+}
+
+#[test]
+fn withdraw_rejects_fee_above_denomination() {
+    let mut p = setup();
+    let ix = withdraw_ix(
+        &p,
+        &p.withdraw_proof,
+        p.w_root,
+        p.nullifier_hash,
+        DENOMINATION + 1,
+        p.recipient.pubkey(),
     );
+    let relayer = p.relayer.insecure_clone();
+    assert!(send(&mut p.svm, ix, &relayer).is_err(), "fee > denomination must be rejected");
+}
 
-    // 4. double-spend: same nullifier must fail (nullifier PDA already exists).
-    assert!(
-        send(&mut svm, withdraw_ix(), &[&relayer]).is_err(),
-        "second withdraw with the same nullifier must be rejected",
-    );
+#[test]
+fn withdraw_rejects_bad_proof_len() {
+    let mut p = setup();
+    let short = p.withdraw_proof[..255].to_vec();
+    let ix = withdraw_ix(&p, &short, p.w_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    let relayer = p.relayer.insecure_clone();
+    assert!(send(&mut p.svm, ix, &relayer).is_err(), "wrong proof length must be rejected");
+}
+
+#[test]
+fn withdraw_rejects_tampered_proof() {
+    let mut p = setup();
+    let mut proof = p.withdraw_proof.clone();
+    proof[0] ^= 0xff;
+    let ix = withdraw_ix(&p, &proof, p.w_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    let relayer = p.relayer.insecure_clone();
+    assert!(send(&mut p.svm, ix, &relayer).is_err(), "tampered proof must be rejected");
+}
+
+#[test]
+fn withdraw_rejects_wrong_recipient() {
+    let mut p = setup();
+    // A recipient not bound into the proof → derived public inputs won't match.
+    let wrong = Keypair::new().pubkey();
+    let ix = withdraw_ix(&p, &p.withdraw_proof, p.w_root, p.nullifier_hash, 0, wrong);
+    let relayer = p.relayer.insecure_clone();
+    assert!(send(&mut p.svm, ix, &relayer).is_err(), "wrong recipient must be rejected");
 }

@@ -1,0 +1,5 @@
+# Programs need edition 2024 (rustc ≥ 1.85); the e2e crate's Solana/LiteSVM deps
+# need a recent stable. `stable` satisfies both; the committed Cargo.lock files
+# pin the actual dependency versions.
+[toolchain]
+channel = "stable"

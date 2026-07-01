@@ -28,7 +28,13 @@ fn process_instruction(
     }
 
     // public_inputs[1] = current_year, at offset PROOF_LEN + 1*FR, LE.
-    let current_year = read_u64_le(&instruction_data[PROOF_LEN + FR..PROOF_LEN + 2 * FR]);
+    let year_bytes = &instruction_data[PROOF_LEN + FR..PROOF_LEN + 2 * FR];
+    // current_year is a u32 in-circuit, so the field's upper bytes must be zero;
+    // check that before trusting the low-8 read (don't blindly truncate a field).
+    if year_bytes[8..].iter().any(|&b| b != 0) {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    let current_year = read_u64_le(year_bytes);
 
     // Illustrative freshness bound. Real programs: assert against Clock sysvar.
     if !(2026..2100).contains(&current_year) {

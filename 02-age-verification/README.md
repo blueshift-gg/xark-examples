@@ -26,7 +26,8 @@ commitment = Poseidon2(birth_year, nonce)
 ```noir
 fn main(birth_year: u32, nonce: Field, commitment: pub Field, current_year: pub u32) {
     // 1. Prove we know the opening of the published commitment.
-    assert(Poseidon2::hash([birth_year as Field, nonce], 2) == commitment);
+    //    hash2(a, b) = std::hash::poseidon2_permutation([a, b, 0, 0])[0]
+    assert(hash2(birth_year as Field, nonce) == commitment);
     // 2. Prove adulthood — range proof, same mechanism as example 01.
     assert(current_year >= birth_year);
     assert(current_year - birth_year >= 18);
@@ -74,11 +75,11 @@ black-boxes (~3.6M/5.4M constraints). That's the verifiable-credentials / zk-KYC
 
 ## Poseidon compatibility
 
-The circuit uses `std::hash::poseidon2::Poseidon2::hash`, which lowers to the `Poseidon2Permutation`
-black-box xark supports. Because the commitment is computed by Noir's own hash (via `just commit`)
-and checked by the same hash in-circuit, the two always agree — there's no cross-system parameter
-matching to get wrong. (Contrast with example 03, which is designed specifically to keep *all*
-hashing inside Noir for the same reason.)
+On nargo 1.0.0-beta.22 the stdlib exposes only the Poseidon2 *permutation*
+(`std::hash::poseidon2_permutation`, the `Poseidon2Permutation` black-box xark supports), so the
+circuit builds a fixed-arity compression `hash2(a, b) = poseidon2_permutation([a, b, 0, 0])[0]`.
+Because the commitment is computed by Noir's own hash (via `just commit`) and checked by the same
+hash in-circuit, the two always agree — there's no cross-system parameter matching to get wrong.
 
 Next: [**03 · Shielded pool →**](../03-shielded-pool/) — Merkle trees, nullifiers, and unlinkable
 transfers.

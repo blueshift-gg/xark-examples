@@ -2,9 +2,12 @@
 **/target/
 *.gz
 
-# Rust
+# Rust — commit lockfiles for reproducible example builds
 Cargo.lock
 !e2e/Cargo.lock
+!01-over-9000/program/Cargo.lock
+!02-age-verification/program/Cargo.lock
+!03-shielded-pool/program/Cargo.lock
 
 # Anchor
 .anchor/

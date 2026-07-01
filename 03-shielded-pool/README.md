@@ -39,8 +39,8 @@ nullifier }`. It verifies proofs and moves lamports — zero Poseidon, tiny CU, 
 between circuit and chain is true *by construction*.
 
 ```
-deposit:   client builds new_root (Noir Poseidon) ─▶ deposit proof ─▶ program checks proof, stores new_root
-withdraw:  client builds path (Noir Poseidon)    ─▶ withdraw proof ─▶ program checks proof + nullifier, pays out
+deposit:   off-chain (nargo) builds new_root ─▶ deposit proof ─▶ program checks proof, stores new_root
+withdraw:  off-chain (nargo) builds path     ─▶ withdraw proof ─▶ program checks proof + nullifier, pays out
 ```
 
 ## Anatomy

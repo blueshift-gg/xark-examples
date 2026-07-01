@@ -13,6 +13,7 @@ publish = false
 # unify (mismatched solana-* versions = compile errors).
 [dev-dependencies]
 litesvm = "0.13"
+sha2 = "0.10"
 solana-address = "2.2"
 solana-instruction = "3.2"
 solana-keypair = "3.1"

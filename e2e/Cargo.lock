@@ -3695,6 +3695,7 @@ name = "xark-examples-e2e"
 version = "0.0.0"
 dependencies = [
  "litesvm",
+ "sha2 0.10.9",
  "solana-address 2.6.1",
  "solana-instruction",
  "solana-keypair",

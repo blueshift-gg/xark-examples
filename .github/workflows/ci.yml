@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Circuit tests need only nargo — no xark, no Solana toolchain.
+  circuits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nargo 1.0.0-beta.22
+        run: |
+          curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
+          echo "$HOME/.nargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.nargo/bin/noirup" -v 1.0.0-beta.22
+      - name: nargo test (all circuits)
+        run: |
+          for d in 01-over-9000/circuit \
+                   02-age-verification/circuit \
+                   03-shielded-pool/circuits/deposit \
+                   03-shielded-pool/circuits/withdraw; do
+            (cd "$d" && nargo test)
+          done
+
+  # The full prove → export → build-sbf → `cargo test` pipeline also needs the
+  # xark CLI (currently a private, sibling-path dependency) and the Anza CLI.
+  # Enable this job once xark is reachable to the runner (submodule or published
+  # crate); the steps are the `just build-all && cd e2e && cargo test` flow.

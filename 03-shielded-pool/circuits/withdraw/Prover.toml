@@ -32,7 +32,7 @@ path_indices = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0",
 
 # Public (order: root, nullifier_hash, recipient_hi, recipient_lo, relayer_hi, relayer_lo, fee)
 root           = "0x2ef9fb3902aae449a8eeeef412f65f10eac3493a6e619106ad4c23d9c528b5a3"
-nullifier_hash = "0x01fc64bed90c55b193ec54e851cd13888d45293f2a2e4efdf83581f39df9c615"
+nullifier_hash = "0x2f5d5944b2d113a2a98e6f5a9ebcd00cc065f9fb9383b1cad3a2fd726e186244"
 recipient_hi   = "58256726482584629441546286265625466004"
 recipient_lo   = "112802383440504508271205606172350790537"
 relayer_hi     = "308783910004703087532718502465021824601"

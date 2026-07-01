@@ -31,7 +31,6 @@ pub mod shielded_pool {
     /// off-chain (the client prints it) and pass it in.
     pub fn initialize(ctx: Context<Initialize>, denomination: u64, empty_root: [u8; 32]) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
-        pool.authority = ctx.accounts.authority.key();
         pool.denomination = denomination;
         pool.next_index = 0;
         pool.current_root_index = 0;
@@ -195,7 +194,6 @@ pub struct Withdraw<'info> {
 #[account]
 #[derive(InitSpace)]
 pub struct Pool {
-    pub authority: Pubkey,
     pub denomination: u64,
     pub next_index: u32,
     pub current_root_index: u32,

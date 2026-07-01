@@ -1,0 +1,15 @@
+[workspace]
+members = ["programs/*"]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+# The verifier crates `xark export` generates depend on `xark-verifier = "0.1"`.
+# Until that's published to crates.io, point it at your local xark checkout so
+# the program can build. Adjust the path to wherever you cloned xark:
+#
+# [patch.crates-io]
+# xark-verifier = { path = "../../../xark/crates/verifier" }

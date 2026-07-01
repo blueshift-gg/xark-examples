@@ -1,0 +1,6 @@
+[package]
+name = "shielded_pool_deposit"
+type = "bin"
+authors = ["Blueshift"]
+
+[dependencies]

@@ -1,0 +1,32 @@
+# Noir / nargo
+**/target/
+*.gz
+
+# xark artifacts (regenerate with `just prove` / `just export`)
+**/groth16/
+**/*-xark-verifier/
+*.bin
+!**/fixtures/**/*.bin
+
+# Rust
+Cargo.lock
+!03-shielded-pool/program/Cargo.lock
+
+# Anchor
+.anchor/
+test-ledger/
+
+# Node
+node_modules/
+dist/
+*.log
+
+# Keys & secrets — NEVER commit these
+*.json
+!**/package.json
+!**/tsconfig.json
+!Anchor.toml
+!**/metadata.json
+*-keypair.json
+note-*.txt
+.env

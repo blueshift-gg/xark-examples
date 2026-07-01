@@ -1,0 +1,12 @@
+# Private inputs — never revealed by the proof.
+birth_year = "1990"
+nonce = "424242424242"
+
+# Public inputs — the verifier sees these.
+#
+# `commitment` is a PLACEHOLDER. Compute the real value for your birth_year/nonce:
+#     just commit        # runs `nargo test --show-output print_commitment`
+# then paste the printed field element here. (It's the Poseidon2 hash of
+# [birth_year, nonce], computed with Noir's own hash so params always match.)
+commitment = "0"
+current_year = "2026"

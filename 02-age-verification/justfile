@@ -1,0 +1,30 @@
+# age-verification — the xark pipeline. See ../RUNBOOK.md for prerequisites.
+
+set shell := ["bash", "-uc"]
+
+# Compute the Poseidon2 commitment for the birth_year/nonce in the
+# `print_commitment` test (uses Noir's own hash, so params always match).
+# Paste the printed field element into circuit/Prover.toml.
+commit:
+    cd circuit && nargo test --show-output print_commitment
+    @echo "→ paste the printed field element into circuit/Prover.toml as commitment"
+
+# Compile → witness → keys (DEV MODE) → prove → verify.
+prove:
+    cd circuit && nargo execute
+    cd circuit && xark inspect
+    cd circuit && xark setup --insecure-dev-mode
+    cd circuit && xark prove
+    cd circuit && xark verify
+
+# Generate the on-chain verifier crate (VK embedded).
+export: prove
+    cd circuit && xark export --crate-name age-verification-xark-verifier
+    @echo "→ verifier crate + instruction_data.bin at circuit/target/age_verification-xark-verifier/"
+
+# Build the Solana program (needs cargo-build-sbf).
+build-program: export
+    cd program && cargo build-sbf
+
+clean:
+    rm -rf circuit/target program/target

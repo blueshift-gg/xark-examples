@@ -1,0 +1,18 @@
+# WITHDRAW witness — PLACEHOLDERS. The client generates these from your saved
+# note (secret, nullifier) and the Merkle path it rebuilds from `Deposit`
+# events. See ../../RUNBOOK.md.
+
+# Private
+secret    = "0"
+nullifier = "0"
+path_elements = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+path_indices  = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
+
+# Public (order: root, nullifier_hash, recipient_hi, recipient_lo, relayer_hi, relayer_lo, fee)
+root           = "0"
+nullifier_hash = "0"
+recipient_hi   = "0"
+recipient_lo   = "0"
+relayer_hi     = "0"
+relayer_lo     = "0"
+fee            = "0"

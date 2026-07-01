@@ -1,0 +1,33 @@
+# over-9000 — the full xark pipeline, one command at a time.
+# Requires: nargo (1.0.0-beta.22), the `xark` CLI, and — for build-program —
+# the Anza CLI (cargo-build-sbf). See ../RUNBOOK.md.
+
+set shell := ["bash", "-uc"]
+
+# Compile the circuit + witness, generate keys (DEV MODE), prove, and verify.
+prove:
+    cd circuit && nargo execute
+    cd circuit && xark inspect
+    # DEV MODE keys — NEVER ship these. Use `xark ceremony` for anything real.
+    cd circuit && xark setup --insecure-dev-mode
+    cd circuit && xark prove
+    cd circuit && xark verify
+
+# Generate the self-contained on-chain verifier crate (VK embedded).
+export: prove
+    cd circuit && xark export --crate-name over-9000-xark-verifier
+    @echo "→ verifier crate + instruction_data.bin at circuit/target/over_9000-xark-verifier/"
+
+# Build the Solana program (needs cargo-build-sbf from the Anza CLI).
+build-program: export
+    cd program && cargo build-sbf
+
+# Verify the exported proof in JS too (snarkjs interop) — optional.
+verify-snarkjs: prove
+    cd circuit && snarkjs groth16 verify \
+        target/groth16/snarkjs-verification_key.json \
+        target/groth16/snarkjs-public.json \
+        target/groth16/snarkjs-proof.json
+
+clean:
+    rm -rf circuit/target program/target

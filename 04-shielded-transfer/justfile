@@ -1,0 +1,30 @@
+# shielded-transfer (04) — one transact circuit + one Anchor/SPL program.
+# See ../RUNBOOK.md for prerequisites. Full flow: `just all`.
+
+set shell := ["bash", "-uc"]
+
+# One-time: compile the circuit + trusted setup (DEV keys — never for production).
+setup:
+    cd circuits/transact && nargo compile
+    cd circuits/transact && xark inspect        # confirm 12 public inputs
+    cd circuits/transact && xark setup --insecure-dev-mode
+
+# Generate the deposit -> transfer -> withdraw proof chain (needs `setup` first).
+gen-chain:
+    cd circuits/transact && python3 ../../scripts/gen_chain.py
+
+# Export the verifier crate + build the Anchor program.
+build-program:
+    cd circuits/transact && xark export --crate-name shielded-transfer-transact-xark-verifier
+    cd program && cargo build-sbf
+
+# Everything, then the in-VM e2e (deposit -> private transfer -> withdraw).
+all: setup gen-chain build-program
+    cd ../e2e && cargo test --test transfer
+
+# Fast circuit-only checks.
+test-circuit:
+    cd circuits/transact && nargo test
+
+clean:
+    rm -rf circuits/transact/target circuits/transact/chain program/target program/.anchor

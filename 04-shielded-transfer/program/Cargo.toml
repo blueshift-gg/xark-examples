@@ -1,0 +1,12 @@
+[workspace]
+members = ["programs/*"]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+# xark-verifier isn't published yet; assumes xark is cloned as a sibling repo.
+[patch.crates-io]
+xark-verifier = { path = "../../../xark/crates/verifier" }

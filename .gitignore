@@ -13,6 +13,10 @@ Cargo.lock
 .anchor/
 test-ledger/
 
+# 04: generated proof chain + driver-written witness (regenerate with `just gen-chain`)
+04-shielded-transfer/circuits/transact/chain/
+04-shielded-transfer/circuits/transact/Prover.toml
+
 # Keys & secrets — never commit
 *-keypair.json
 .env

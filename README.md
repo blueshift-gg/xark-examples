@@ -25,7 +25,8 @@ Ordered easiest → hardest; each introduces one new idea.
 |---------|--------|-------------|:-------------:|----------|
 | [01 · over-9000](./01-over-9000/) | a secret value is `> 9000` | range proofs, pure verify | 0 | Pinocchio |
 | [02 · age-verification](./02-age-verification/) | `age ≥ 18` without revealing a birthday | commitments | 2 | Pinocchio |
-| [03 · shielded-pool](./03-shielded-pool/) | an unlinkable deposit → withdrawal | Merkle membership, nullifiers, 2 circuits | 4 + 7 | Anchor |
+| [03 · shielded-pool](./03-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado++) | Merkle membership, nullifiers, 2 circuits | 4 + 7 | Anchor |
+| [04 · shielded-transfer](./04-shielded-transfer/) | a private, arbitrary-amount payment (Zcash-style) | notes, key hierarchy, JoinSplit, SPL, memos | 12 | Anchor + SPL |
 
 ## Prerequisites
 

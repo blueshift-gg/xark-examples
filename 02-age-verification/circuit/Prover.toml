@@ -1,6 +1,8 @@
 # Private inputs — never revealed by the proof.
 birth_year = "1990"
-nonce = "424242424242"
+# Blinding nonce — must be high-entropy (≥128-bit) so the commitment can't be
+# brute-forced over the ~120 plausible birth years.
+nonce = "0x1cf7e9a3b5d20486f1a9c8e7b6d5049382716f5e4d3c2b1a09f8e7d6c5b4a392"
 
 # Public inputs — the verifier sees these.
 #
@@ -8,5 +10,5 @@ nonce = "424242424242"
 #     just commit        # runs `nargo test --show-output print_commitment`
 # then paste the printed field element here. (It's the Poseidon2 hash of
 # [birth_year, nonce], computed with Noir's own hash so params always match.)
-commitment = "0x170d75fd1c83586dae043be180b24ec53c131e9d342057d3cec6806a57411a81"
+commitment = "0x27ade1149a33a134222bcad0bf82b938df5a8672c5ab5095fb0f392567057729"
 current_year = "2026"

@@ -22,6 +22,14 @@ const PROOF_LEN: usize = 256;
 const POOL_SEED: &[u8] = b"pool";
 const NULLIFIER_SEED: &[u8] = b"nullifier";
 
+// Root of an all-empty height-TREE_HEIGHT tree (zeros[H]), little-endian — the
+// deposit circuit's `old_root` for the first deposit. Fixed on-chain so the pool
+// can't be seeded with a wrong root. Regenerate if TREE_HEIGHT or the hash changes.
+const EMPTY_ROOT: [u8; 32] = [
+    135, 227, 121, 77, 213, 238, 58, 244, 153, 9, 194, 249, 82, 209, 238, 237, 67, 230, 207, 242,
+    142, 19, 80, 134, 156, 253, 3, 15, 178, 188, 57, 48,
+];
+
 #[program]
 pub mod shielded_pool {
     use super::*;
@@ -29,13 +37,15 @@ pub mod shielded_pool {
     /// Create the pool. `empty_root` is the root of an all-empty tree of height
     /// `TREE_HEIGHT` — i.e. `zeros[H]` from the deposit circuit. Compute it once
     /// off-chain (the client prints it) and pass it in.
-    pub fn initialize(ctx: Context<Initialize>, denomination: u64, empty_root: [u8; 32]) -> Result<()> {
+    // Permissionless: first caller creates the singleton pool and fixes the
+    // denomination (fine for a demo). The empty-tree root is fixed on-chain, so
+    // the pool cannot be seeded with a wrong root.
+    pub fn initialize(ctx: Context<Initialize>, denomination: u64) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
         pool.denomination = denomination;
         pool.next_index = 0;
         pool.current_root_index = 0;
-        // `init` already zeroed the account, so `roots` is all-zero; just set root 0.
-        pool.roots[0] = empty_root;
+        pool.roots[0] = EMPTY_ROOT; // `init` zeroed the rest of the ring
         pool.bump = ctx.bumps.pool;
         Ok(())
     }
@@ -99,6 +109,11 @@ pub mod shielded_pool {
     /// the relayer. The proof binds recipient/relayer/fee, so nobody can
     /// re-target it. The `nullifier` account is created here; a second attempt
     /// with the same nullifier fails at account creation → no double-spend.
+    ///
+    /// Relayer economics: the relayer pays the (non-refundable) nullifier rent
+    /// and the tx fee, and is compensated only by `fee`. `fee` is chosen by the
+    /// depositor and bound into the proof, so there's no on-chain floor — a
+    /// relayer must check `fee` covers its costs off-chain before submitting.
     pub fn withdraw(
         ctx: Context<Withdraw>,
         proof: Vec<u8>,

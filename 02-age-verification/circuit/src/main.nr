@@ -32,7 +32,7 @@ fn main(
 #[test]
 fn print_commitment() {
     let birth_year: Field = 1990;
-    let nonce: Field = 424242424242;
+    let nonce: Field = 0x1cf7e9a3b5d20486f1a9c8e7b6d5049382716f5e4d3c2b1a09f8e7d6c5b4a392;
     let commitment = hash2(birth_year, nonce);
     println(commitment);
 }
@@ -40,11 +40,11 @@ fn print_commitment() {
 #[test]
 fn adult_passes() {
     // 2026 - 1990 = 36 >= 18
-    main(1990, 424242424242, 0x170d75fd1c83586dae043be180b24ec53c131e9d342057d3cec6806a57411a81, 2026);
+    main(1990, 0x1cf7e9a3b5d20486f1a9c8e7b6d5049382716f5e4d3c2b1a09f8e7d6c5b4a392, 0x27ade1149a33a134222bcad0bf82b938df5a8672c5ab5095fb0f392567057729, 2026);
 }
 
 #[test(should_fail)]
 fn minor_fails() {
     // 2026 - 2020 = 6 < 18 → the age assert must fail (commitment matches [2020, nonce])
-    main(2020, 424242424242, 0x15b6779b81d216e762da8e8650dc797e98b98371b6e83434839c8a3e3ad58a68, 2026);
+    main(2020, 0x1cf7e9a3b5d20486f1a9c8e7b6d5049382716f5e4d3c2b1a09f8e7d6c5b4a392, 0x234695133ea768cb71bdf1bfbfc2cd8ee4b44d7fb68e60a340ff0786b28832cc, 2026);
 }

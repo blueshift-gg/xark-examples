@@ -75,7 +75,7 @@ just prove-withdraw        # generates the withdraw verifier crate
 just build-program
 cd program && anchor deploy
 
-# 3. Drive it: initialize(denomination, empty_root) → deposit(commitment, new_root,
+# 3. Drive it: initialize(denomination) → deposit(commitment, new_root,
 #    proof) → withdraw(proof, root, nullifier_hash, fee). The exact instruction
 #    encodings + account metas are in ../e2e/tests/pool.rs.
 ```

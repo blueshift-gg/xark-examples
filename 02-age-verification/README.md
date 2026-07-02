@@ -16,8 +16,8 @@ commitment to your birth year and publishes *only* the commitment:
 commitment = Poseidon2(birth_year, nonce)
 ```
 
-- `nonce` is a random blinding value. Without it, an attacker could just hash all ~120 plausible
-  birth years and match yours. With it, the commitment reveals nothing.
+- `nonce` is a random blinding value (use ≥128-bit entropy). Without it, an attacker could just
+  hash all ~120 plausible birth years and match yours. With it, the commitment reveals nothing.
 - The commitment is public and reusable. Any number of times, you prove **"I know the `birth_year`
   and `nonce` behind this commitment, and `current_year − birth_year ≥ 18`."**
 

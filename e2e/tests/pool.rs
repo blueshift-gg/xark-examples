@@ -84,7 +84,6 @@ fn setup() -> Pool {
     // Deposit public inputs: [old_root, new_root, commitment, index].
     let dpi = read(&format!("{DEPOSIT_DIR}/public_inputs.solana.bin"));
     assert_eq!(dpi.len(), 4 * 32, "deposit must expose 4 public inputs");
-    let empty_root = chunk32(&dpi, 0);
     let new_root = chunk32(&dpi, 1);
     let commitment = chunk32(&dpi, 2);
     let deposit_proof = read(&format!("{DEPOSIT_DIR}/proof.solana.bin"));
@@ -111,10 +110,9 @@ fn setup() -> Pool {
 
     let (pool, _) = Address::find_program_address(&[b"pool"], &program_id);
 
-    // initialize(denomination, empty_root)
+    // initialize(denomination) — the empty-tree root is fixed on-chain.
     let mut data = disc("initialize").to_vec();
     data.extend_from_slice(&DENOMINATION.to_le_bytes());
-    data.extend_from_slice(&empty_root);
     send(
         &mut svm,
         Instruction {

@@ -20,3 +20,4 @@ test-ledger/
 # Keys & secrets — never commit
 *-keypair.json
 .env
+.gstack/

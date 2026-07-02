@@ -88,4 +88,42 @@ association sets are deliberately out of scope); or carry an audit. `ZERO` (the 
 is `0` here for clarity — a production pool uses a nothing-up-my-sleeve nonzero value so no real
 commitment can collide with an empty slot.
 
+## Reference
+
+### Instructions
+
+**`initialize(denomination: u64)`** — create the pool for a denomination (the empty-tree root is
+fixed on-chain). Accounts: `pool` (init, PDA), `authority` (signer, payer), `system_program`.
+
+**`deposit(commitment: [u8;32], new_root: [u8;32], proof: Vec<u8>)`** — deposit the denomination and
+append `commitment`; `proof` attests that `new_root` extends the tree by one leaf. Accounts: `pool`
+(mut), `depositor` (signer), `system_program`. Public inputs: `old_root, new_root, leaf, index`.
+
+**`withdraw(proof: Vec<u8>, root: [u8;32], nullifier_hash: [u8;32], fee: u64)`** — pay
+`denomination − fee` to `recipient` and `fee` to the relayer; the `nullifier` PDA is created here, so
+a repeat with the same nullifier fails. Accounts: `pool` (mut), `nullifier` (init, PDA), `recipient`
+(unchecked, mut), `relayer` (signer, payer), `system_program`. Public inputs:
+`root, nullifier_hash, recipient_hi, recipient_lo, relayer_hi, relayer_lo, fee`.
+
+### PDAs & state
+
+| PDA | Seeds |
+|---|---|
+| `pool` | `["pool", denomination as u64 LE]` |
+| `nullifier` | `["nullifier", denomination as u64 LE, nullifier_hash]` |
+
+`Pool` state: `denomination: u64`, `next_index: u32`, `current_root_index: u32`,
+`roots: [[u8;32]; 16]` (the recent-root ring), `bump: u8`. A pubkey enters the circuit as two 128-bit
+halves — `lo = bytes[0..16]`, `hi = bytes[16..32]`, each little-endian in a field.
+
+### Errors
+
+| Error | Message |
+|---|---|
+| `BadProofLen` | proof must be 256 bytes |
+| `InvalidProof` | invalid proof |
+| `UnknownRoot` | unknown or stale merkle root |
+| `FeeTooHigh` | fee exceeds denomination |
+| `TreeFull` | tree is full |
+
 Next → [04 · Shielded transfer](../04-shielded-transfer/)

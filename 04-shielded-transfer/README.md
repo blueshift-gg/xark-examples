@@ -101,4 +101,43 @@ must add:
   available).
 - Unaudited, and `nk`/`ivk` derivation is a simplified Sapling, not the full spec.
 
+## Reference
+
+### Instructions
+
+**`initialize()`** — create the pool and token `vault` for one SPL mint. Accounts: `pool` (init,
+PDA), `vault` (init, token account PDA, authority = `pool`), `mint`, `authority` (signer, payer),
+`token_program`, `system_program`, `rent`.
+
+**`transact(proof, root, nf: [[u8;32];2], cm_out: [[u8;32];2], new_root, vpub_in: u64, vpub_out: u64,
+fee: u64, memo0: Vec<u8>, memo1: Vec<u8>)`** — one JoinSplit: verify the proof, burn `nf[0..2]`,
+append `cm_out[0..2]` (advancing `old_root → new_root`), move SPL for the public value slots, and emit
+the two memos. Accounts: `pool` (mut), `vault` (mut), `nullifier0`/`nullifier1` (init, PDA), `user`
+(signer, payer), `user_token` (mut, source for `vpub_in`), `recipient_token` (mut, dest for
+`vpub_out`), `token_program`, `system_program`. Public inputs:
+`root, asset, nf0, nf1, cm0, cm1, old_root, new_root, index, vpub_in, vpub_out, fee`.
+
+### PDAs & state
+
+| PDA | Seeds |
+|---|---|
+| `pool` | `["pool", mint]` |
+| `vault` | `["vault", mint]` — token account, authority = `pool` |
+| `nullifier0` / `nullifier1` | `["nullifier", mint, nf[i]]` |
+
+`Pool` state: `mint: Pubkey`, `next_index: u32`, `current_root_index: u32`, `roots: [[u8;32]; 16]`,
+`bump: u8`. `asset` (the circuit's per-token tag) is the low 16 bytes of the mint pubkey.
+
+### Events & errors
+
+`MemoEvent { leaf_index: u32, commitment: [u8;32], ciphertext: Vec<u8> }` — one per output note; the
+`ciphertext` is the off-circuit encrypted memo the recipient trial-decrypts.
+
+| Error | Message |
+|---|---|
+| `BadProofLen` | proof must be 256 bytes |
+| `InvalidProof` | invalid proof |
+| `UnknownRoot` | unknown or stale merkle root |
+| `TreeFull` | tree is full |
+
 Back to the [index](../README.md).

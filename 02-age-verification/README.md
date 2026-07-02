@@ -1,85 +1,77 @@
-# 02 · Age verification — prove 18+ without revealing your birthday
+# 02 · Age verification — prove 18+ without a birthday
 
-> Goal: convince a Solana program you're an adult, revealing neither your birth year nor anything
-> that identifies you.
+Prove to a Solana program that you're an adult, revealing neither your birth year nor anything that
+identifies you. This is example [01](../01-over-9000/)'s range proof pointed at something real — and
+the tool that makes it real is a **commitment**.
 
-This is example [01](../01-over-9000/)'s range proof, now pointed at something real. The trick that
-makes it useful is a **commitment**: a public, hiding fingerprint of a secret you can later prove
-things about.
+## Commit once, prove many times
 
-## The idea: commit once, prove forever
-
-An **issuer** (a KYC provider, a government portal, or you in a one-time setup) computes a
-commitment to your birth year and publishes *only* the commitment:
+An issuer (a KYC provider, a government portal, or you in a one-time setup) hashes your birth year
+with a random nonce and publishes only the result:
 
 ```
 commitment = Poseidon2(birth_year, nonce)
 ```
 
-- `nonce` is a random blinding value (use ≥128-bit entropy). Without it, an attacker could just
-  hash all ~120 plausible birth years and match yours. With it, the commitment reveals nothing.
-- The commitment is public and reusable. Any number of times, you prove **"I know the `birth_year`
-  and `nonce` behind this commitment, and `current_year − birth_year ≥ 18`."**
+- The **nonce** is what makes the commitment *hiding*. There are only ~120 plausible birth years;
+  without a nonce an attacker just hashes all of them and matches yours. A ≥128-bit nonce makes that
+  search hopeless, so the commitment leaks nothing.
+- The commitment is **public and reusable**. Any number of times, you prove *"I know the `birth_year`
+  and `nonce` behind this commitment, and `current_year − birth_year ≥ 18`"* — without reopening it.
 
 ## The circuit
 
 ```noir
 fn main(birth_year: u32, nonce: Field, commitment: pub Field, current_year: pub u32) {
-    // 1. Prove we know the opening of the published commitment.
-    //    hash2(a, b) = std::hash::poseidon2_permutation([a, b, 0, 0])[0]
+    // Prove we know the opening of the published commitment.
+    // hash2(a, b) = std::hash::poseidon2_permutation([a, b, 0, 0])[0]
     assert(hash2(birth_year as Field, nonce) == commitment);
-    // 2. Prove adulthood — range proof, same mechanism as example 01.
+    // Then the range check — same mechanism as example 01.
     assert(current_year >= birth_year);
     assert(current_year - birth_year >= 18);
 }
 ```
 
-Two public inputs (`commitment`, `current_year`), two private (`birth_year`, `nonce`). The proof
-binds the range check to a *specific* commitment — so unlike example 01, you can't just make up a
-number. You have to know the opening of a commitment someone published.
+Two public inputs (`commitment`, `current_year`), two private (`birth_year`, `nonce`). The first
+assertion is the load-bearing one: it binds the range check to a *specific published commitment*, so
+unlike example 01 you can't invent a convenient number — you have to know the opening of a commitment
+someone already trusts.
+
+The idea to carry forward: **a ZK proof guarantees consistency, not honesty.** It proves the birth
+year inside the commitment is at least 18 years ago; it says nothing about whether the commitment
+itself is truthful. That's a trust decision the program makes — next.
+
+## From demo to production
+
+The on-chain side is kept minimal so the ZK part is legible. A real deployment adds two checks the
+program stubs out (both flagged in `program/src/lib.rs`):
+
+1. **Trust the issuer.** Check `commitment` against a registry of commitments signed by issuers you
+   trust — otherwise anyone commits to `birth_year = 1900` and "proves" they're old enough.
+2. **Trust the clock.** Assert `current_year` matches the on-chain `Clock` sysvar, so a prover can't
+   back- or post-date.
+
+Want to drop the trusted issuer entirely? Have the circuit verify an **issuer signature** over the
+birth year instead of a commitment — xark supports the `EcdsaSecp256k1`/`EcdsaSecp256r1` black-boxes
+(~3.6M / 5.4M constraints). That's the verifiable-credentials / zk-KYC path.
 
 ## Run it
 
 ```bash
-# 1. Compute the commitment for your birth_year/nonce (edits are in the circuit)
-just commit
-#    → paste the printed field element into circuit/Prover.toml as `commitment`
-
-# 2. Prove → export → build
+just commit         # compute Poseidon2(birth_year, nonce) with Noir's own hash
+                    #   → paste the printed field into circuit/Prover.toml as `commitment`
 just prove
 just export
 just build-program
-
-# 3. Verify the proof in a real Solana VM (no deploy needed)
-cd ../e2e && cargo test age_verification
-#    → age_verification_verifies_on_chain ... ok
+cd ../e2e && cargo test age_verification   # verify in a real Solana VM
 ```
 
-To deploy to devnet, `solana program deploy` the `.so` and submit the 320-byte
-`instruction_data.bin` with any Solana client.
+`just commit` computes the commitment with the *same* Poseidon the circuit uses, so the two always
+agree — there's no cross-tool hash-parameter matching to get wrong. (On nargo beta.22 the stdlib
+exposes only the Poseidon2 permutation, so `hash2` is a fixed-arity compression over it:
+`poseidon2_permutation([a, b, 0, 0])[0]`.)
 
-## From demo to production
+To deploy to devnet, `solana program deploy` the `.so` and submit the 320-byte `instruction_data.bin`
+(256-byte proof + two 32-byte public inputs).
 
-This example keeps the on-chain side minimal so the ZK part is clear. A real deployment adds two
-checks the program stubs out (both noted in `program/src/lib.rs`):
-
-1. **Trust the issuer.** Check the `commitment` public input against a registry of commitments
-   signed by issuers you trust — otherwise anyone can commit to `birth_year = 1900` and "prove"
-   they're old enough. The ZK proof guarantees *consistency*, not *honesty of the input*.
-2. **Trust the clock.** Assert `current_year` matches the on-chain `Clock` sysvar, so a prover
-   can't backdate or postdate.
-
-Want to eliminate the trusted issuer entirely? Have the circuit verify an **issuer signature** over
-the birth year instead of a commitment — xark supports the `EcdsaSecp256k1`/`EcdsaSecp256r1`
-black-boxes (~3.6M/5.4M constraints). That's the verifiable-credentials / zk-KYC upgrade path.
-
-## Poseidon compatibility
-
-On nargo 1.0.0-beta.22 the stdlib exposes only the Poseidon2 *permutation*
-(`std::hash::poseidon2_permutation`, the `Poseidon2Permutation` black-box xark supports), so the
-circuit builds a fixed-arity compression `hash2(a, b) = poseidon2_permutation([a, b, 0, 0])[0]`.
-Because the commitment is computed by Noir's own hash (via `just commit`) and checked by the same
-hash in-circuit, the two always agree — there's no cross-system parameter matching to get wrong.
-
-Next: [**03 · Shielded pool →**](../03-shielded-pool/) — Merkle trees, nullifiers, and unlinkable
-transfers.
+Next → [03 · Shielded pool](../03-shielded-pool/)

@@ -1,152 +1,95 @@
 # xark Examples
 
-Zero-knowledge circuits written in [Noir](https://noir-lang.org/) with on-chain verification on
-[Solana](https://solana.com/) using [Groth16](https://eprint.iacr.org/2016/260) via
-[**xark**](https://github.com/blueshift-gg/xark).
+Zero-knowledge circuits written in [Noir](https://noir-lang.org/), proved and verified on
+[Solana](https://solana.com/) with [Groth16](https://eprint.iacr.org/2016/260) via
+[**xark**](https://github.com/blueshift-gg/xark). Four worked examples, easiest to hardest, each
+introducing one new idea — and every one is **built, proved, and verified end-to-end in an
+in-process Solana VM** (no validator, no network; see [Testing](#testing)).
 
-Every example is **built, proved, and verified end-to-end in an in-process Solana VM** — see
-[Testing](#testing).
+New to zero-knowledge? Start with the [from-zero primer](./docs/learn-zk/) — the mental model before
+any Noir.
 
-## What's a circuit?
+## The idea in one paragraph
 
-A circuit is a program whose execution you can *prove* without revealing its inputs. You write it
-in Noir, mark some inputs `pub` (public) and leave the rest private, and add the constraints that
-must hold. xark turns that circuit into a ~256-byte Groth16 proof and a Solana verifier that checks
-it through the native `alt_bn128` syscalls — so a program can act on "this statement is true"
-without ever seeing the private data behind it.
+A circuit is a computation you can *prove you ran correctly* without revealing its inputs. You write
+it in Noir, mark each input `pub` (public) or leave it private, and assert the constraints that must
+hold. xark compiles that circuit to a ~256-byte Groth16 proof and generates a Solana verifier that
+checks it through the native `alt_bn128` syscalls. The payoff: a program can act on *"this statement
+is true"* — you're over 18, this note is unspent, the amounts balance — without ever seeing the
+private data behind it. Designing a ZK application is mostly choosing **what's private, what's public,
+and what must hold between them**; the examples below are that choice made four ways.
 
-Brand new to ZK? Start with **[docs/learn-zk](./docs/learn-zk/)** — a from-zero primer.
+## The examples
 
-## Example circuits
+| Example | Proves | New idea | Public inputs | On-chain |
+|---|---|---|:-:|---|
+| [01 · over-9000](./01-over-9000/) | a secret value is `> 9000` | range proofs, bare verify | 0 | Pinocchio |
+| [02 · age-verification](./02-age-verification/) | `age ≥ 18` without a birthday | commitments | 2 | Pinocchio |
+| [03 · shielded-pool](./03-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado++) | Merkle membership, nullifiers, two circuits | 4 + 7 | Anchor |
+| [04 · shielded-transfer](./04-shielded-transfer/) | a private, arbitrary-amount payment (Zcash-style) | notes, key hierarchy, JoinSplit, SPL | 12 | Anchor + SPL |
 
-Ordered easiest → hardest; each introduces one new idea.
+## How it fits together
 
-| Example | Proves | New concept | Public inputs | On-chain |
-|---------|--------|-------------|:-------------:|----------|
-| [01 · over-9000](./01-over-9000/) | a secret value is `> 9000` | range proofs, pure verify | 0 | Pinocchio |
-| [02 · age-verification](./02-age-verification/) | `age ≥ 18` without revealing a birthday | commitments | 2 | Pinocchio |
-| [03 · shielded-pool](./03-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado++) | Merkle membership, nullifiers, 2 circuits | 4 + 7 | Anchor |
-| [04 · shielded-transfer](./04-shielded-transfer/) | a private, arbitrary-amount payment (Zcash-style) | notes, key hierarchy, JoinSplit, SPL, memos | 12 | Anchor + SPL |
-
-## Prerequisites
-
-- [Noir](https://noir-lang.org/docs/getting_started/quick_start) `1.0.0-beta.22` (must match xark's ACIR pin)
-- The [`xark`](https://github.com/blueshift-gg/xark) CLI
-- Rust `1.85+`, and the [Anza CLI](https://docs.anza.xyz/cli/install) for `cargo build-sbf`
-- [`just`](https://github.com/casey/just); Anchor `1.1` for examples 03 and 04
-
-```bash
-# Noir
-curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
-noirup -v 1.0.0-beta.22
-
-# xark (from your xark checkout)
-cargo install --path ../xark/crates/cli
+```
+  Noir circuit      you write the rules: what's secret, what's public, what must hold
+     │ nargo execute
+     ▼
+  ACIR + witness    a compiled circuit + one satisfying secret assignment
+     │ xark          lower ACIR → R1CS, then Groth16 over BN254
+     ▼
+  proof + verifier  a 256-byte proof, and `xark export`s a verifier crate with the VK baked in
+     │
+     ▼
+  Solana program    calls verify_instruction_data(...) via the native alt_bn128 syscalls
 ```
 
-## Wallet setup
+Noir is the frontend (the language); **xark is the backend** (proving + the on-chain verifier). To
+change a circuit you edit Noir and re-run `xark export` — your program depends on the generated crate
+and doesn't itself change. `instruction_data.bin` is just `proof (256 B) ‖ public_inputs (N × 32 B,
+little-endian)`.
 
-For devnet deployment (the in-VM tests need no wallet):
-
-```bash
-solana-keygen new
-solana config set --url devnet
-solana airdrop 2
-```
-
-## Quick start
+## Run one
 
 ```bash
 cd 01-over-9000
 just prove          # nargo execute → xark setup → prove → verify
-just export         # xark export → the on-chain verifier crate + instruction_data.bin
-just build-program  # cargo build-sbf → the deployable .so
+just export         # → the verifier crate + instruction_data.bin
+just build-program  # → the deployable .so
 ```
 
-Then deploy and submit per the example's README, or run the whole suite in-VM (below).
+Each example's README walks its circuit; [RUNBOOK.md](./RUNBOOK.md) has the full toolchain, the
+one-time `xark-verifier` path setup, and devnet deployment.
 
 ## Testing
 
-Unlike a devnet round-trip, the [`e2e/`](./e2e/) suite loads each compiled program into
-[LiteSVM](https://github.com/LiteSVM/litesvm) and submits a real proof — verifying it through the
-same `alt_bn128` syscalls mainnet uses, with **no validator and no network**. Each test also
-submits a *tampered* proof and asserts it's rejected; the pool test runs a full
-deposit → withdraw and asserts a double-spend fails.
+The [`e2e/`](./e2e/) suite loads each compiled program into
+[LiteSVM](https://github.com/LiteSVM/litesvm) and submits a real proof — verified through the same
+`alt_bn128` syscalls mainnet uses, with no validator and no network. Every test also submits a
+tampered proof and asserts it's rejected; 03 runs a full deposit → withdraw and asserts a
+double-spend fails; 04 runs a shield → private-pay → withdraw.
 
 ```bash
-# build every example first (see each RUNBOOK), then:
-cd e2e && cargo test
+# build the examples first (see each README / the RUNBOOK), then:
+cd e2e && cargo test          # or, from the repo root: just test
 # over_9000_verifies_on_chain ... ok
 # age_verification_verifies_on_chain ... ok
 # shielded_pool_full_flow ... ok
 # shielded_transfer_flow ... ok
 ```
 
-## Pipeline overview
-
-```
-  Noir circuit           you write the rules: what's secret, what's public, what must hold
-     │  nargo execute
-     ▼
-  ACIR + witness         a compiled circuit + a specific satisfying assignment
-     │  xark  (lower ACIR → R1CS, Groth16 over BN254)
-     ▼
-  proof + verifier       a 256-byte proof, and `xark export`s a verifier crate (VK baked in)
-     │
-     ▼
-  Solana program         calls verify_instruction_data(...) via the native alt_bn128 syscalls
-```
-
-### Noir (off-chain circuit development)
-
-| Step | Command | Output |
-|------|---------|--------|
-| Compile + witness | `nargo execute` | `target/<name>.json`, `<name>.gz` |
-
-### xark (proving & verifier creation)
-
-| Step | Command | Output |
-|------|---------|--------|
-| Inspect | `xark inspect` | opcode coverage, public-input count |
-| Setup | `xark setup --insecure-dev-mode` | proving + verifying keys (dev only) |
-| Prove | `xark prove` | `proof.bin`, `public_inputs.bin` (+ snarkjs JSON) |
-| Verify | `xark verify` | `Proof verified: true` |
-| Export | `xark export` | a verifier crate + `instruction_data.bin` |
-
-### Solana (on-chain verification)
-
-| Step | Command | Output |
-|------|---------|--------|
-| Build | `cargo build-sbf` | `target/deploy/<name>.so` |
-| Deploy | `solana program deploy …` | program id |
-
-## On-chain verification
-
-`xark export` generates a self-contained verifier crate with the verifying key embedded at compile
-time. Your program depends on it and calls one function:
-
-```rust
-// instruction_data = proof (256 B) || public_inputs (N × 32 B, little-endian)
-if verifier::verify_instruction_data(instruction_data) {
-    // proof valid — act on it
-}
-```
-
-When the circuit changes, re-run `xark export`; the generated crate is the only thing that updates.
-
 ## How xark compares
 
-The Solana Foundation's [`noir-examples`](https://github.com/solana-foundation/noir-examples) use
-**Sunspot** for this backend slot. xark is the more rigorous alternative: a real multi-party
-**MPC ceremony** (`xark ceremony`) instead of dev keys, **Lean formal proofs** + fuzzing +
-differential tests against snarkjs, **explicit opcode rejection** (it refuses what it can't prove
-soundly), snarkjs-compatible output, and a Pinocchio low-CU path.
+The Solana Foundation's [`noir-examples`](https://github.com/solana-foundation/noir-examples) fill
+this backend slot with **Sunspot**. xark differs where it matters for shipping: a real multi-party
+setup (`xark ceremony`) instead of dev keys, Lean formal proofs plus fuzzing and differential tests
+against snarkjs, **explicit opcode rejection** (it refuses circuits it can't prove soundly rather
+than emit an unsound proof), snarkjs-compatible artifacts, and a Pinocchio low-CU verify path.
 
 ## Status & safety
 
-> Reference implementations for learning — **unaudited, not for production.** `03-shielded-pool`
-> in particular is educational; privacy tooling carries real legal weight depending on your
-> jurisdiction. Never ship `--insecure-dev-mode` keys; use `xark ceremony` for anything real.
+> Reference implementations for **learning — unaudited, not for production.** The shielded examples
+> especially are educational; privacy tooling carries real legal weight depending on your
+> jurisdiction. Never ship `--insecure-dev-mode` keys — use `xark ceremony` for anything real.
 
 ## Resources
 

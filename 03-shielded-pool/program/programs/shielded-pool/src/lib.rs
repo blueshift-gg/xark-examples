@@ -4,7 +4,7 @@
 //! `xark export` generated). Public inputs are 32-byte little-endian, appended
 //! to the 256-byte proof in each circuit's declared order.
 //!
-//! ⚠️ Reference implementation — unaudited, educational. See the README.
+//! Reference implementation — unaudited, educational. See the README.
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 

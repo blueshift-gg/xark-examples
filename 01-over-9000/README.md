@@ -31,8 +31,8 @@ That's the whole thing. Three things are happening:
 
 ## What it proves (and what it doesn't)
 
-✅ The sender knows *some* `power_level > 9000`.
-❌ It does **not** tie that number to anything — any prover can just pick `9001`.
+- It proves the sender knows *some* `power_level > 9000`.
+- It does **not** tie that number to anything — any prover can just pick `9001`.
 
 That's the point of a bare range proof: it's a *mechanism*, not an application. Bind the hidden
 value to something the world cares about — a commitment (example 02) or a Merkle tree of deposits

@@ -20,6 +20,3 @@ test-ledger/
 # Keys & secrets — never commit
 *-keypair.json
 .env
-
-# Roadmap spikes — keep uncommitted per request
-plans/

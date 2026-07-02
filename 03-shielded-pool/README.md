@@ -15,7 +15,7 @@ denomination, so pools are fully independent. Amounts stay hidden *within* a
 denomination because every note in a pool is identical in value — arbitrary
 amounts need hidden-value notes, which is [04](../04-shielded-transfer/).
 
-> ⚠️ **Reference implementation. Unaudited. Educational.** Mixers carry real
+> **Reference implementation. Unaudited. Educational.** Mixers carry real
 > legal and regulatory weight depending on where you are. Understand that
 > before building on this. Never use `--insecure-dev-mode` keys for anything real.
 
@@ -92,15 +92,19 @@ entire deposit → withdraw flow (and a rejected double-spend) in an in-process 
 
 ## What it does and doesn't give you
 
-✅ On-chain **unlinkability** between deposit and withdrawal, across the anonymity set.
-✅ **Double-spend protection** via one-time nullifiers.
-✅ **Front-run protection** — recipient/relayer/fee are bound into the proof.
+Gives you:
 
-❌ Fixed denomination per pool (arbitrary, hidden amounts need a note/UTXO design — see [04](../04-shielded-transfer/)).
-❌ Timing/amount correlation still leaks if the anonymity set is tiny or you withdraw instantly.
-❌ No compliance features (viewing keys, association sets) — deliberately out of scope here.
-❌ Not audited. The circuits and program are written to teach the mechanism clearly, not to be safe
-   to hold value.
+- On-chain **unlinkability** between deposit and withdrawal, across the anonymity set.
+- **Double-spend protection** via one-time nullifiers.
+- **Front-run protection** — recipient/relayer/fee are bound into the proof.
+
+Doesn't:
+
+- Fixed denomination per pool (arbitrary, hidden amounts need a note/UTXO design — see [04](../04-shielded-transfer/)).
+- Timing/amount correlation still leaks if the anonymity set is tiny or you withdraw instantly.
+- No compliance features (viewing keys, association sets) — deliberately out of scope here.
+- Not audited. The circuits and program are written to teach the mechanism clearly, not to be safe
+  to hold value.
 
 ## Notes on correctness (read before trusting a proof)
 

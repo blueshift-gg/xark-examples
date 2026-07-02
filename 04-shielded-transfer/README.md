@@ -8,7 +8,7 @@ Where [03](../03-shielded-pool/) is a fixed-denomination mixer, 04 is a
 **Zcash/Sapling-style shielded pool**: notes with hidden values, a key
 hierarchy, and shielded→shielded transfers. It's the real thing.
 
-> ⚠️ **Reference implementation. Unaudited. Educational.** Do not hold value in
+> **Reference implementation. Unaudited. Educational.** Do not hold value in
 > this. See "Known gaps" below — some are load-bearing.
 
 ## The one primitive: `transact` (JoinSplit)

@@ -1,6 +1,6 @@
 # 1 · What is a ZK proof?
 
-One idea, and it's genuinely this simple:
+One idea, and it's this simple:
 
 > **A zero-knowledge proof lets you convince someone that a statement is true, while revealing
 > nothing beyond the fact that it's true.**

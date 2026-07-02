@@ -43,7 +43,7 @@ xark ceremony ...
 ```
 
 with Schnorr proofs-of-knowledge and δ-consistency pairing checks so each contribution is
-verifiable. This is one of the places xark takes rigor seriously where prototype tooling just hands
+verifiable. This is one of the places xark does real work where prototype tooling just hands
 you dev keys — see xark's `docs/trusted-setup.md`.
 
 ## The one rule

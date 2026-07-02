@@ -4,7 +4,7 @@ Two ways in, depending on where you're starting.
 
 ## I've never touched zero-knowledge → **[Learn ZK, from zero](./learn-zk/)**
 
-A short, honest track that gives you the mental model before any Noir. Five pages, ~30 minutes:
+A short track that gives you the mental model before any Noir. Five pages, ~30 minutes:
 
 1. [What is a ZK proof?](./learn-zk/01-what-is-a-zk-proof.md) — the one idea, no maths
 2. [Circuits & constraints](./learn-zk/02-circuits-and-constraints.md) — how "code" becomes "proof"

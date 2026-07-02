@@ -7,19 +7,18 @@
 //! circuits/transact/chain/. Each proof carries its own anchor root, nullifiers,
 //! output commitments and new root; the program verifies, moves SPL for the
 //! public value slots, burns nullifiers, and advances the tree.
-use std::path::PathBuf;
+mod common;
+use common::{borsh_bytes, chunk32, disc, read, send, u64_at};
+
 use std::str::FromStr;
 
 use litesvm::LiteSVM;
 use litesvm::types::TransactionResult;
-use sha2::{Digest, Sha256};
 use solana_account::Account;
 use solana_address::Address;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
-use solana_message::Message;
 use solana_signer::Signer;
-use solana_transaction::Transaction;
 
 const PROGRAM_ID: &str = "CUCcJJBRbK6tK4nPP2zgmvdYbKWSCGGVdRegtJ2GPJtF";
 const TOKEN_PROGRAM: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -31,27 +30,6 @@ const MINT_PUBKEY: [u8; 32] = [
 ];
 const CHAIN: &str = "04-shielded-transfer/circuits/transact/chain";
 
-fn disc(name: &str) -> [u8; 8] {
-    Sha256::digest(format!("global:{name}").as_bytes())[..8].try_into().unwrap()
-}
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
-}
-fn read(rel: &str) -> Vec<u8> {
-    let p = repo_root().join(rel);
-    std::fs::read(&p).unwrap_or_else(|e| panic!("missing {}: {e}", p.display()))
-}
-fn chunk32(b: &[u8], i: usize) -> [u8; 32] {
-    b[i * 32..i * 32 + 32].try_into().unwrap()
-}
-fn u64_at(b: &[u8], i: usize) -> u64 {
-    u64::from_le_bytes(b[i * 32..i * 32 + 8].try_into().unwrap())
-}
-fn borsh_bytes(v: &[u8]) -> Vec<u8> {
-    let mut out = (v.len() as u32).to_le_bytes().to_vec();
-    out.extend_from_slice(v);
-    out
-}
 fn tok(lamports: u64, data: Vec<u8>) -> Account {
     Account { lamports, data, owner: Address::from_str(TOKEN_PROGRAM).unwrap(), executable: false, rent_epoch: 0 }
 }
@@ -78,10 +56,6 @@ fn token_data(mint: &[u8; 32], owner: &[u8; 32], amount: u64) -> Vec<u8> {
 }
 fn token_amount(a: &Account) -> u64 {
     u64::from_le_bytes(a.data[64..72].try_into().unwrap())
-}
-fn send(svm: &mut LiteSVM, ix: Instruction, signer: &Keypair) -> TransactionResult {
-    let msg = Message::new(&[ix], Some(&signer.pubkey()));
-    svm.send_transaction(Transaction::new(&[signer], msg, svm.latest_blockhash()))
 }
 
 #[allow(clippy::too_many_arguments)]

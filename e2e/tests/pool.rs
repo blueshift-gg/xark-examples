@@ -3,18 +3,16 @@
 //! All field bytes come from the exported `*.solana.bin` artifacts so the
 //! on-chain public inputs match the proofs exactly. Requires the pool built per
 //! ../RUNBOOK.md.
-use std::path::PathBuf;
+mod common;
+use common::{borsh_bytes, chunk32, disc, read, send};
+
 use std::str::FromStr;
 
 use litesvm::LiteSVM;
-use litesvm::types::TransactionResult;
-use sha2::{Digest, Sha256};
 use solana_address::Address;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_keypair::Keypair;
-use solana_message::Message;
 use solana_signer::Signer;
-use solana_transaction::Transaction;
 
 const PROGRAM_ID: &str = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS";
 const DENOMINATION: u64 = 1_000_000_000; // 1 SOL
@@ -32,32 +30,6 @@ const RECIPIENT: [u8; 64] = [
     206, 253, 228, 242, 220, 84, 148, 212, 171, 202, 211, 57, 164, 158, 9, 139, 238, 207, 95, 214,
     211, 43,
 ];
-
-/// Anchor instruction discriminator = sha256("global:<name>")[..8].
-fn disc(name: &str) -> [u8; 8] {
-    Sha256::digest(format!("global:{name}").as_bytes())[..8].try_into().unwrap()
-}
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
-}
-fn read(rel: &str) -> Vec<u8> {
-    let p = repo_root().join(rel);
-    std::fs::read(&p).unwrap_or_else(|e| panic!("missing {}: {e}", p.display()))
-}
-fn chunk32(bytes: &[u8], i: usize) -> [u8; 32] {
-    bytes[i * 32..i * 32 + 32].try_into().unwrap()
-}
-fn borsh_bytes(v: &[u8]) -> Vec<u8> {
-    let mut out = (v.len() as u32).to_le_bytes().to_vec();
-    out.extend_from_slice(v);
-    out
-}
-fn send(svm: &mut LiteSVM, ix: Instruction, signer: &Keypair) -> TransactionResult {
-    let msg = Message::new(&[ix], Some(&signer.pubkey()));
-    let tx = Transaction::new(&[signer], msg, svm.latest_blockhash());
-    svm.send_transaction(tx)
-}
 
 const DEPOSIT_DIR: &str =
     "03-shielded-pool/circuits/deposit/target/shielded_pool_deposit-xark-verifier";
@@ -264,7 +236,7 @@ fn two_denominations_coexist() {
     let authority = Keypair::new();
     svm.airdrop(&authority.pubkey(), 100 * DENOMINATION).unwrap();
 
-    let mut init = |svm: &mut LiteSVM, denom: u64| -> (Address, bool) {
+    let init = |svm: &mut LiteSVM, denom: u64| -> (Address, bool) {
         let (pool, _) =
             Address::find_program_address(&[b"pool", &denom.to_le_bytes()], &program_id);
         let mut data = disc("initialize").to_vec();

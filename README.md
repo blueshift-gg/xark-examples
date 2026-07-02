@@ -33,7 +33,7 @@ Ordered easiest → hardest; each introduces one new idea.
 - [Noir](https://noir-lang.org/docs/getting_started/quick_start) `1.0.0-beta.22` (must match xark's ACIR pin)
 - The [`xark`](https://github.com/blueshift-gg/xark) CLI
 - Rust `1.85+`, and the [Anza CLI](https://docs.anza.xyz/cli/install) for `cargo build-sbf`
-- [`just`](https://github.com/casey/just); Anchor `1.1` for example 03
+- [`just`](https://github.com/casey/just); Anchor `1.1` for examples 03 and 04
 
 ```bash
 # Noir
@@ -79,6 +79,7 @@ cd e2e && cargo test
 # over_9000_verifies_on_chain ... ok
 # age_verification_verifies_on_chain ... ok
 # shielded_pool_full_flow ... ok
+# shielded_transfer_flow ... ok
 ```
 
 ## Pipeline overview
@@ -136,7 +137,7 @@ When the circuit changes, re-run `xark export`; the generated crate is the only 
 ## How xark compares
 
 The Solana Foundation's [`noir-examples`](https://github.com/solana-foundation/noir-examples) use
-**Sunspot** for this backend slot. xark is the production-grade alternative: a real multi-party
+**Sunspot** for this backend slot. xark is the more rigorous alternative: a real multi-party
 **MPC ceremony** (`xark ceremony`) instead of dev keys, **Lean formal proofs** + fuzzing +
 differential tests against snarkjs, **explicit opcode rejection** (it refuses what it can't prove
 soundly), snarkjs-compatible output, and a Pinocchio low-CU path.

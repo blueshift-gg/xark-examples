@@ -5,7 +5,7 @@
 //! to `new_root`, moves SPL tokens for the public value slots, and emits the two
 //! encrypted memos as events for the scanning wallet.
 //!
-//! ⚠️ Reference implementation — unaudited, educational.
+//! Reference implementation — unaudited, educational.
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 

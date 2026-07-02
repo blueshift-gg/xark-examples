@@ -3,9 +3,9 @@
 Everything you need to actually run the examples. If a command here disagrees with an example's
 `justfile`, the `justfile` wins (it's what runs).
 
-> All three examples are compiled, proved, and verified end-to-end by the LiteSVM suite in `e2e/`
+> All four examples are compiled, proved, and verified end-to-end by the LiteSVM suite in `e2e/`
 > (see §5). The items most worth re-confirming against your own toolchain are flagged as
-> **⚠ CHECK** below.
+> **CHECK** below.
 
 ## 1. Prerequisites
 
@@ -15,7 +15,7 @@ Everything you need to actually run the examples. If a command here disagrees wi
 | `xark` CLI | current | `cargo install --path <your-xark-checkout>/crates/cli` |
 | Rust | 1.85+ | `rustup update` (edition 2024 support is required) |
 | Anza CLI (`cargo-build-sbf`, `solana`) | latest | https://docs.anza.xyz/cli/install |
-| Anchor | 1.1 (example 03 only) | `avm install 1.1.2 && avm use 1.1.2` |
+| Anchor | 1.1 (examples 03 & 04) | `avm install 1.1.2 && avm use 1.1.2` |
 | `just` | any | `cargo install just` |
 | `snarkjs` | optional | `npm i -g snarkjs` (browser/JS verification) |
 
@@ -44,11 +44,11 @@ If your xark checkout lives elsewhere, edit that path in each program's `Cargo.t
 
 ## 3. The pipeline, one command at a time
 
-Every example follows the same shape (example 03 does it twice — once per circuit):
+Every example follows the same shape (examples 03 and 04 run it more than once — once per circuit or proof):
 
 ```bash
 nargo execute                     # compile the circuit + generate the witness from Prover.toml
-xark inspect                      # ⚠ CHECK: prints the public-input order — must match the program
+xark inspect                      # CHECK: prints the public-input order — must match the program
 xark setup --insecure-dev-mode    # DEV keys only. Real deployments: `xark ceremony` (see §6)
 xark prove                        # produce the Groth16 proof
 xark verify                       # → "Proof verified: true"
@@ -73,7 +73,7 @@ cd program && anchor build && anchor deploy
 To see any example verify on-chain **without a validator**, run the in-VM suite:
 
 ```bash
-cd e2e && cargo test   # over_9000, age_verification, shielded_pool_full_flow — all pass
+cd e2e && cargo test   # over_9000, age_verification, shielded_pool_full_flow, shielded_transfer_flow — all pass
 ```
 
 To deploy for real, `solana program deploy` the `.so` and submit its `instruction_data.bin` (the
@@ -90,7 +90,7 @@ xark ceremony ...        # see xark's docs/trusted-setup.md
 
 Ship only keys produced by a ceremony you trust.
 
-## 7. Cross-check in JavaScript (optional, but a great confidence signal)
+## 7. Cross-check in JavaScript (optional)
 
 `xark setup`/`xark prove` also emit snarkjs-compatible JSON, so the same proof verifies outside
 Solana:
@@ -103,7 +103,7 @@ snarkjs groth16 verify \
   target/groth16/snarkjs-proof.json
 ```
 
-## 8. The three **⚠ CHECK**s
+## 8. The three **CHECK**s
 
 1. **Public-input order.** `xark inspect` prints the order the circuit exposes public inputs. It
    must match how each program concatenates them (documented at the top of every `program/src`).

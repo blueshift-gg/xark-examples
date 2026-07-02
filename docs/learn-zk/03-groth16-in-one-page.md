@@ -1,7 +1,7 @@
 # 3 · Groth16 in one page
 
 There are many proof systems (Groth16, PLONK, Honk, STARKs, …). These examples use **Groth16**, and
-here's the honest, minimal picture of why and how — enough to use it well, not a cryptography
+here's the minimal picture of why and how — enough to use it well, not a cryptography
 course.
 
 ## Why Groth16 for Solana

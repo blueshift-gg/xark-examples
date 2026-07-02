@@ -108,7 +108,8 @@ fn setup() -> Pool {
         svm.airdrop(&kp.pubkey(), 3 * DENOMINATION).unwrap();
     }
 
-    let (pool, _) = Address::find_program_address(&[b"pool"], &program_id);
+    let (pool, _) =
+        Address::find_program_address(&[b"pool", &DENOMINATION.to_le_bytes()], &program_id);
 
     // initialize(denomination) — the empty-tree root is fixed on-chain.
     let mut data = disc("initialize").to_vec();
@@ -161,8 +162,10 @@ fn withdraw_ix(
     fee: u64,
     recipient: Address,
 ) -> Instruction {
-    let (nullifier, _) =
-        Address::find_program_address(&[b"nullifier", &nullifier_hash], &p.program_id);
+    let (nullifier, _) = Address::find_program_address(
+        &[b"nullifier", &DENOMINATION.to_le_bytes(), &nullifier_hash],
+        &p.program_id,
+    );
     let mut data = disc("withdraw").to_vec();
     data.extend_from_slice(&borsh_bytes(proof));
     data.extend_from_slice(&root);
@@ -249,4 +252,41 @@ fn withdraw_rejects_wrong_recipient() {
     let ix = withdraw_ix(&p, &p.withdraw_proof, p.w_root, p.nullifier_hash, 0, wrong);
     let relayer = p.relayer.insecure_clone();
     assert!(send(&mut p.svm, ix, &relayer).is_err(), "wrong recipient must be rejected");
+}
+
+#[test]
+fn two_denominations_coexist() {
+    let program_id = Address::from_str(PROGRAM_ID).unwrap();
+    let system = Address::from_str("11111111111111111111111111111111").unwrap();
+    let mut svm = LiteSVM::new();
+    svm.add_program(program_id, &read("03-shielded-pool/program/target/deploy/shielded_pool.so"))
+        .unwrap();
+    let authority = Keypair::new();
+    svm.airdrop(&authority.pubkey(), 100 * DENOMINATION).unwrap();
+
+    let mut init = |svm: &mut LiteSVM, denom: u64| -> (Address, bool) {
+        let (pool, _) =
+            Address::find_program_address(&[b"pool", &denom.to_le_bytes()], &program_id);
+        let mut data = disc("initialize").to_vec();
+        data.extend_from_slice(&denom.to_le_bytes());
+        let ix = Instruction {
+            program_id,
+            accounts: vec![
+                AccountMeta::new(pool, false),
+                AccountMeta::new(authority.pubkey(), true),
+                AccountMeta::new_readonly(system, false),
+            ],
+            data,
+        };
+        (pool, send(svm, ix, &authority).is_ok())
+    };
+
+    let (pool_a, ok_a) = init(&mut svm, 1_000_000_000);
+    let (pool_b, ok_b) = init(&mut svm, 10_000_000_000);
+    assert!(ok_a && ok_b, "both denominations initialize");
+    assert_ne!(pool_a, pool_b, "each denomination gets a distinct pool PDA");
+    assert!(
+        svm.get_account(&pool_a).is_some() && svm.get_account(&pool_b).is_some(),
+        "both pools exist independently",
+    );
 }

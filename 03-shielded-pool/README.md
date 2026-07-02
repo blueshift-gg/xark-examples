@@ -1,4 +1,4 @@
-# 03 · Shielded pool — unlinkable transfers
+# 03 · Shielded pool — unlinkable transfers (Tornado++, multi-denomination)
 
 > Goal: deposit a fixed amount of SOL, then withdraw it to a fresh address such
 > that **nobody can link the withdrawal to the deposit** — the on-chain graph
@@ -7,6 +7,13 @@
 This is the real thing: Merkle membership, nullifiers, and two cooperating
 circuits. It combines everything from [01](../01-over-9000/) (proofs) and
 [02](../02-age-verification/) (commitments) into a working privacy primitive.
+
+**Multi-denomination:** each denomination is its own pool (`initialize(denomination)`
+creates a PDA seeded by the amount), exactly like Tornado's separate 0.1 / 1 / 10
+pools. One deployed program serves all sizes; nullifiers are namespaced per
+denomination, so pools are fully independent. Amounts stay hidden *within* a
+denomination because every note in a pool is identical in value — arbitrary
+amounts need hidden-value notes, which is [04](../04-shielded-transfer/).
 
 > ⚠️ **Reference implementation. Unaudited. Educational.** Mixers carry real
 > legal and regulatory weight depending on where you are. Understand that
@@ -89,7 +96,7 @@ entire deposit → withdraw flow (and a rejected double-spend) in an in-process 
 ✅ **Double-spend protection** via one-time nullifiers.
 ✅ **Front-run protection** — recipient/relayer/fee are bound into the proof.
 
-❌ Fixed denomination only (arbitrary amounts need a UTXO/note design — a natural v2).
+❌ Fixed denomination per pool (arbitrary, hidden amounts need a note/UTXO design — see [04](../04-shielded-transfer/)).
 ❌ Timing/amount correlation still leaks if the anonymity set is tiny or you withdraw instantly.
 ❌ No compliance features (viewing keys, association sets) — deliberately out of scope here.
 ❌ Not audited. The circuits and program are written to teach the mechanism clearly, not to be safe

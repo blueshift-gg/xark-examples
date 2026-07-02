@@ -165,8 +165,16 @@ pub mod shielded_pool {
 // ---- Accounts ---------------------------------------------------------------
 
 #[derive(Accounts)]
+#[instruction(denomination: u64)]
 pub struct Initialize<'info> {
-    #[account(init, payer = authority, space = 8 + Pool::INIT_SPACE, seeds = [POOL_SEED], bump)]
+    // One pool per denomination (like Tornado's separate per-size pools).
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Pool::INIT_SPACE,
+        seeds = [POOL_SEED, denomination.to_le_bytes().as_ref()],
+        bump
+    )]
     pub pool: Box<Account<'info, Pool>>,
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -175,7 +183,7 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
-    #[account(mut, seeds = [POOL_SEED], bump = pool.bump)]
+    #[account(mut, seeds = [POOL_SEED, pool.denomination.to_le_bytes().as_ref()], bump = pool.bump)]
     pub pool: Box<Account<'info, Pool>>,
     #[account(mut)]
     pub depositor: Signer<'info>,
@@ -185,14 +193,14 @@ pub struct Deposit<'info> {
 #[derive(Accounts)]
 #[instruction(proof: Vec<u8>, root: [u8; 32], nullifier_hash: [u8; 32])]
 pub struct Withdraw<'info> {
-    #[account(mut, seeds = [POOL_SEED], bump = pool.bump)]
+    #[account(mut, seeds = [POOL_SEED, pool.denomination.to_le_bytes().as_ref()], bump = pool.bump)]
     pub pool: Box<Account<'info, Pool>>,
     /// Marker account; creation fails if this nullifier was already spent.
     #[account(
         init,
         payer = relayer,
         space = 8,
-        seeds = [NULLIFIER_SEED, nullifier_hash.as_ref()],
+        seeds = [NULLIFIER_SEED, pool.denomination.to_le_bytes().as_ref(), nullifier_hash.as_ref()],
         bump
     )]
     pub nullifier: Account<'info, Nullifier>,

@@ -2,25 +2,37 @@
 
 set shell := ["bash", "-uc"]
 
-# Compute the Poseidon2 commitment for the birth_year/nonce in the
-# `print_commitment` test (uses Noir's own hash, so params always match).
-# Paste the printed field element into circuit/Prover.toml.
-commit:
-    cd circuit && nargo test --show-output print_commitment
-    @echo "→ paste the printed field element into circuit/Prover.toml as commitment"
+# The demo inputs. `commitment` is Poseidon2(birth_year, nonce) — recompute it
+# with `just commit` if you change either private value.
+birth_year := "1990"
+nonce := "13102783505849749806854498441424493672889223651541975554449217606361432761234"
+commitment := "16270599866198939632822375879477475677301143667419388581635073777919968987292"
+current_year := "2026"
 
-# Compile → witness → keys (DEV MODE) → prove → verify.
+# Compute the Poseidon2 commitment for a birth_year/nonce (native mirror of the
+# circuit's gadget hash, KAT-pinned — params always match).
+commit:
+    cd ../e2e && cargo run -q --bin commit -- {{birth_year}} {{nonce}}
+    @echo "→ paste the printed field element into this justfile as commitment"
+
+# Compile → keys (DEV MODE) → prove → verify.
 prove:
-    cd circuit && nargo execute
-    cd circuit && xark inspect
-    cd circuit && xark setup --insecure-dev-mode
-    cd circuit && xark prove
-    cd circuit && xark verify
+    xark build circuit
+    xark inspect circuit
+    xark setup circuit
+    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; printf '%s\n' \
+        'birth_year = {{birth_year}}' 'nonce = {{nonce}}' \
+        'commitment = {{commitment}}' 'current_year = {{current_year}}' \
+        > "$tmp"; xark prove circuit --input-file "$tmp"
+
+# Run the in-crate circuit tests (adult passes / minor fails / wrong opening).
+test-circuit:
+    xark test circuit
 
 # Generate the on-chain verifier crate (VK embedded).
 export: prove
-    cd circuit && xark export --crate-name age-verification-xark-verifier
-    @echo "→ verifier crate + instruction_data.bin at circuit/target/age_verification-xark-verifier/"
+    xark export circuit --allow-insecure --crate-name age-verification-xark-verifier --verifier-dep '{ git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }'
+    @echo "→ verifier crate + instruction_data.bin at circuit/target/xark/age_verification/verifier/"
 
 # Build the Solana program (needs cargo-build-sbf).
 build-program: export

@@ -26,15 +26,16 @@ Two phases:
 
 ## What this means for the examples
 
-The examples use:
+The example justfiles run:
 
 ```bash
-xark setup --insecure-dev-mode
+xark setup <circuit-dir>
 ```
 
-This derives keys deterministically with **no secrecy at all** — the "toxic waste" is public, so
-anyone can forge proofs. That is completely fine for learning and local testing, and **completely
-unsafe for anything holding value.** The flag is named to make sure you never ship it by accident.
+With no `.ptau` transcript available, xark falls back to a single-party OS-random dev setup and
+marks its metadata `production_safe = false`. This is fine for local testing and **unsafe for
+anything holding value** because there is no ceremony transcript or independent contribution.
+`xark export` refuses these keys unless the caller explicitly passes `--allow-insecure`.
 
 For a real deployment, xark runs an actual phase-2 ceremony:
 
@@ -48,7 +49,7 @@ you dev keys — see xark's `docs/trusted-setup.md`.
 
 ## The one rule
 
-> **Never deploy a circuit to mainnet with `--insecure-dev-mode` keys.** Use keys from a ceremony
+> **Never deploy a circuit with dev-mode keys.** Use keys from a ceremony
 > you trust. If you can't point to the ceremony, treat the proofs as forgeable.
 
 Next: [your ZK journey — where to go from here →](./05-your-zk-journey.md)

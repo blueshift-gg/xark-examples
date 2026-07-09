@@ -1,0 +1,15 @@
+# Shielded pool — deposit circuit crate (Rust → R1CS via xark).
+[package]
+name = "shielded_pool_deposit"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+xark = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03", default-features = false }
+pool-merkle = { path = "../merkle" }

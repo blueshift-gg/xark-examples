@@ -1,31 +1,36 @@
-//! Shielded transfer — on-chain program (Anchor + SPL). One `transact`
-//! instruction covers deposit / private transfer / withdraw via the JoinSplit
-//! value slots. The chain never hashes: it verifies the transact proof, checks
-//! the anchor root is remembered, burns the two nullifiers, advances the tree
-//! to `new_root`, moves SPL tokens for the public value slots, and emits the two
-//! encrypted memos as events for the scanning wallet.
+//! Shielded transfer — the on-chain half (Anchor + SPL).
 //!
-//! Reference implementation — unaudited, educational.
+//! One `transact` instruction covers deposit, private transfer, and withdraw
+//! via the JoinSplit value slots. The chain never hashes: it verifies the
+//! proof, checks the anchor root is remembered, burns the two nullifiers,
+//! advances the tree to `new_root`, moves SPL for the public value slots, and
+//! emits the two proof-bound encrypted memos for scanning wallets.
+//!
+//! Verifier calldata is the 256-byte proof followed by the circuit's 18 public
+//! inputs, each a 32-byte little-endian field element, in declaration order.
+//!
+//! Reference implementation — unaudited, educational. See the README.
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use shielded_transfer_transact_xark_verifier as verifier;
+use solana_sha256_hasher::hash;
 
 declare_id!("CUCcJJBRbK6tK4nPP2zgmvdYbKWSCGGVdRegtJ2GPJtF");
 
-const ROOT_HISTORY_SIZE: usize = 16;
 const TREE_HEIGHT: u32 = 20;
-const FR: usize = 32;
+const ROOT_HISTORY_SIZE: usize = 16;
 const PROOF_LEN: usize = 256;
 
 const POOL_SEED: &[u8] = b"pool";
 const VAULT_SEED: &[u8] = b"vault";
 const NULLIFIER_SEED: &[u8] = b"nullifier";
 
-// Root of an all-empty height-20 tree under this circuit's Poseidon2 sponge, LE.
+// Root of an all-empty height-20 tree under the circuit's Poseidon2, LE.
+// Regenerate with `cargo run --bin transfer-witness -- empty-root` (e2e crate).
 const EMPTY_ROOT: [u8; 32] = [
-    75, 160, 12, 16, 190, 37, 75, 229, 79, 138, 175, 76, 142, 198, 231, 254, 247, 25, 54, 200, 71,
-    62, 71, 145, 25, 151, 120, 197, 135, 206, 3, 6,
+    251, 142, 67, 247, 199, 111, 241, 124, 245, 96, 180, 214, 179, 51, 248, 149, 20, 177, 173, 83,
+    193, 126, 124, 38, 168, 0, 139, 11, 55, 225, 46, 3,
 ];
 
 #[program]
@@ -59,37 +64,53 @@ pub mod shielded_transfer {
         memo0: Vec<u8>,
         memo1: Vec<u8>,
     ) -> Result<()> {
+        let pool = &ctx.accounts.pool;
         require!(proof.len() == PROOF_LEN, PoolError::BadProofLen);
+        require!(
+            (pool.next_index as u64 + 2) <= (1u64 << TREE_HEIGHT),
+            PoolError::TreeFull
+        );
+        require!(pool.knows_root(&root), PoolError::UnknownRoot);
+        // The circuit binds `fee` so a relayer flow can charge one, but this
+        // program doesn't route fees anywhere — reject nonzero rather than
+        // silently swallowing a public input.
+        require!(fee == 0, PoolError::FeeNotSupported);
 
-        let (mint, current_root_index, next_index, bump) = {
-            let p = &ctx.accounts.pool;
-            (p.mint, p.current_root_index, p.next_index, p.bump)
-        };
-        require!((next_index as u64 + 2) <= (1u64 << TREE_HEIGHT), PoolError::TreeFull);
-        require!(is_known_root(&ctx.accounts.pool, &root), PoolError::UnknownRoot);
+        let (recipient_hi, recipient_lo) =
+            split_bytes(&ctx.accounts.recipient_token.key().to_bytes());
+        let (memo0_hash_hi, memo0_hash_lo) = split_bytes(&hash(&memo0).to_bytes());
+        let (memo1_hash_hi, memo1_hash_lo) = split_bytes(&hash(&memo1).to_bytes());
 
-        let old_root = ctx.accounts.pool.roots[current_root_index as usize];
-        let asset = asset_from_mint(&mint);
+        // Public inputs in the transact circuit's order.
+        let calldata = verifier_calldata(
+            &proof,
+            &[
+                root,
+                asset_from_mint(&pool.mint),
+                nf[0],
+                nf[1],
+                cm_out[0],
+                cm_out[1],
+                pool.current_root(),
+                new_root,
+                field_from_u64(pool.next_index as u64),
+                field_from_u64(vpub_in),
+                field_from_u64(vpub_out),
+                field_from_u64(fee),
+                recipient_hi,
+                recipient_lo,
+                memo0_hash_hi,
+                memo0_hash_lo,
+                memo1_hash_hi,
+                memo1_hash_lo,
+            ],
+        );
+        require!(
+            verifier::verify_instruction_data(&calldata),
+            PoolError::InvalidProof
+        );
 
-        // public inputs in the circuit's exact order (all LE 32-byte fields):
-        // root, asset, nf0, nf1, cm0, cm1, old_root, new_root, index, vpub_in, vpub_out, fee
-        let mut data = Vec::with_capacity(PROOF_LEN + 12 * FR);
-        data.extend_from_slice(&proof);
-        data.extend_from_slice(&root);
-        data.extend_from_slice(&asset);
-        data.extend_from_slice(&nf[0]);
-        data.extend_from_slice(&nf[1]);
-        data.extend_from_slice(&cm_out[0]);
-        data.extend_from_slice(&cm_out[1]);
-        data.extend_from_slice(&old_root);
-        data.extend_from_slice(&new_root);
-        data.extend_from_slice(&u32_field_le(next_index));
-        data.extend_from_slice(&u64_field_le(vpub_in));
-        data.extend_from_slice(&u64_field_le(vpub_out));
-        data.extend_from_slice(&u64_field_le(fee));
-        require!(verifier::verify_instruction_data(&data), PoolError::InvalidProof);
-
-        // public value entering the shield: user -> vault
+        // Public value entering the shield: user → vault.
         if vpub_in > 0 {
             token::transfer(
                 CpiContext::new(
@@ -103,8 +124,10 @@ pub mod shielded_transfer {
                 vpub_in,
             )?;
         }
-        // public value leaving the shield: vault -> recipient (signed by pool PDA)
+
+        // Public value leaving the shield: vault → recipient, signed by the pool PDA.
         if vpub_out > 0 {
+            let (mint, bump) = (pool.mint, pool.bump);
             let signer: &[&[&[u8]]] = &[&[POOL_SEED, mint.as_ref(), &[bump]]];
             token::transfer(
                 CpiContext::new_with_signer(
@@ -120,22 +143,25 @@ pub mod shielded_transfer {
             )?;
         }
 
-        // advance the tree: two leaves appended, remember the final root
-        let pool = &mut ctx.accounts.pool;
-        let next = (current_root_index + 1) % (ROOT_HISTORY_SIZE as u32);
-        pool.roots[next as usize] = new_root;
-        pool.current_root_index = next;
-        pool.next_index = next_index + 2;
-
-        // publish encrypted memos for scanning (delivery is off-circuit)
-        emit!(MemoEvent { leaf_index: next_index, commitment: cm_out[0], ciphertext: memo0 });
-        emit!(MemoEvent { leaf_index: next_index + 1, commitment: cm_out[1], ciphertext: memo1 });
-        let _ = fee;
+        // Advance the tree past the two appended leaves and publish the memos
+        // (delivery is off-circuit; wallets trial-decrypt to find their notes).
+        let index = ctx.accounts.pool.next_index;
+        ctx.accounts.pool.push_root(new_root);
+        emit!(MemoEvent {
+            leaf_index: index,
+            commitment: cm_out[0],
+            encrypted_memo: memo0
+        });
+        emit!(MemoEvent {
+            leaf_index: index + 1,
+            commitment: cm_out[1],
+            encrypted_memo: memo1
+        });
         Ok(())
     }
 }
 
-// ---- Accounts ---------------------------------------------------------------
+// ---- accounts ----------------------------------------------------------------
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -180,11 +206,11 @@ pub struct Transact<'info> {
 
     #[account(mut)]
     pub user: Signer<'info>,
-    // Source for vpub_in (deposit). Unused when vpub_in == 0.
+    /// Source for `vpub_in` (deposit). Unused when `vpub_in` is 0.
     #[account(mut)]
     pub user_token: Box<Account<'info, TokenAccount>>,
-    // Destination for vpub_out (withdraw). Unused when vpub_out == 0.
-    /// CHECK: an SPL token account; identity is bound into the proof via the note.
+    /// Destination for `vpub_out` (withdraw). Its full address is bound into
+    /// the proof; unused when `vpub_out` is 0.
     #[account(mut)]
     pub recipient_token: Box<Account<'info, TokenAccount>>,
 
@@ -192,7 +218,7 @@ pub struct Transact<'info> {
     pub system_program: Program<'info, System>,
 }
 
-// ---- State ------------------------------------------------------------------
+// ---- state -------------------------------------------------------------------
 
 #[account]
 #[derive(InitSpace)]
@@ -204,14 +230,34 @@ pub struct Pool {
     pub bump: u8,
 }
 
+impl Pool {
+    fn current_root(&self) -> [u8; 32] {
+        self.roots[self.current_root_index as usize]
+    }
+
+    /// Remember `root` as the newest ring entry; the tree grew by one pair.
+    fn push_root(&mut self, root: [u8; 32]) {
+        self.current_root_index = (self.current_root_index + 1) % ROOT_HISTORY_SIZE as u32;
+        self.roots[self.current_root_index as usize] = root;
+        self.next_index += 2;
+    }
+
+    /// Is `root` one of the recent ring entries? (All-zero never matches.)
+    fn knows_root(&self, root: &[u8; 32]) -> bool {
+        root.iter().any(|&b| b != 0) && self.roots.iter().any(|r| r == root)
+    }
+}
+
 #[account]
 pub struct Nullifier {}
 
+/// One per output note; `ciphertext` is the off-circuit encrypted memo the
+/// recipient trial-decrypts.
 #[event]
 pub struct MemoEvent {
     pub leaf_index: u32,
     pub commitment: [u8; 32],
-    pub ciphertext: Vec<u8>,
+    pub encrypted_memo: Vec<u8>,
 }
 
 #[error_code]
@@ -224,32 +270,43 @@ pub enum PoolError {
     UnknownRoot,
     #[msg("tree is full")]
     TreeFull,
+    #[msg("fee routing is not implemented; pass fee = 0")]
+    FeeNotSupported,
 }
 
-// ---- Helpers ----------------------------------------------------------------
+// ---- verifier plumbing ---------------------------------------------------------
 
-fn is_known_root(pool: &Pool, root: &[u8; 32]) -> bool {
-    if root.iter().all(|&b| b == 0) {
-        return false;
+/// proof ‖ public inputs — the exact byte string the generated verifier checks.
+fn verifier_calldata(proof: &[u8], public_inputs: &[[u8; 32]]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(proof.len() + 32 * public_inputs.len());
+    data.extend_from_slice(proof);
+    for input in public_inputs {
+        data.extend_from_slice(input);
     }
-    pool.roots.iter().any(|r| r == root)
+    data
 }
 
-// asset field tag = low 16 bytes of the mint pubkey (< 2^128 < BN254 prime).
-fn asset_from_mint(mint: &Pubkey) -> [u8; 32] {
-    let b = mint.to_bytes();
-    let mut out = [0u8; 32];
-    out[..16].copy_from_slice(&b[..16]);
-    out
-}
-
-fn u32_field_le(x: u32) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    out[..4].copy_from_slice(&x.to_le_bytes());
-    out
-}
-fn u64_field_le(x: u64) -> [u8; 32] {
+/// A u64 as a 32-byte little-endian field element.
+fn field_from_u64(x: u64) -> [u8; 32] {
     let mut out = [0u8; 32];
     out[..8].copy_from_slice(&x.to_le_bytes());
+    out
+}
+
+/// Split any 32-byte value into two 128-bit field elements:
+/// `lo` = bytes[0..16], `hi` = bytes[16..32].
+fn split_bytes(bytes: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    let mut hi = [0u8; 32];
+    let mut lo = [0u8; 32];
+    lo[..16].copy_from_slice(&bytes[..16]);
+    hi[..16].copy_from_slice(&bytes[16..]);
+    (hi, lo)
+}
+
+/// The circuit's per-token asset tag: the low 16 bytes of the mint pubkey
+/// (< 2^128, so it always fits the field).
+fn asset_from_mint(mint: &Pubkey) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out[..16].copy_from_slice(&mint.to_bytes()[..16]);
     out
 }

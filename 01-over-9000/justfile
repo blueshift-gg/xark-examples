@@ -1,22 +1,26 @@
 # over-9000 — the full xark pipeline, one command at a time.
-# Requires: nargo (1.0.0-beta.22), the `xark` CLI, and — for build-program —
-# the Anza CLI (cargo-build-sbf). See ../RUNBOOK.md.
+# Requires: the `xark` CLI + its pinned nightly (`xark doctor` checks both) and,
+# for build-program, the Anza CLI (cargo-build-sbf). See ../RUNBOOK.md.
 
 set shell := ["bash", "-uc"]
 
-# Compile the circuit + witness, generate keys (DEV MODE), prove, and verify.
+# Compile the circuit (Rust → MIR → R1CS), generate keys (DEV MODE), prove, verify.
 prove:
-    cd circuit && nargo execute
-    cd circuit && xark inspect
-    # DEV MODE keys — NEVER ship these. Use `xark ceremony` for anything real.
-    cd circuit && xark setup --insecure-dev-mode
-    cd circuit && xark prove
-    cd circuit && xark verify
+    xark build circuit
+    xark inspect circuit
+    # No .ptau → setup falls back to a DEV-MODE key and says so. NEVER ship it;
+    # use `xark ceremony` (or `xark setup --ptau-file`) for anything real.
+    xark setup circuit
+    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; printf 'power_level = 9001\n' > "$tmp"; xark prove circuit --input-file "$tmp"
+
+# Run the in-crate circuit tests (xark build + cargo test via xark-prover).
+test-circuit:
+    xark test circuit
 
 # Generate the self-contained on-chain verifier crate (VK embedded).
 export: prove
-    cd circuit && xark export --crate-name over-9000-xark-verifier
-    @echo "→ verifier crate + instruction_data.bin at circuit/target/over_9000-xark-verifier/"
+    xark export circuit --allow-insecure --crate-name over-9000-xark-verifier --verifier-dep '{ git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }'
+    @echo "→ verifier crate + instruction_data.bin at circuit/target/xark/over_9000/verifier/"
 
 # Build the Solana program (needs cargo-build-sbf from the Anza CLI).
 build-program: export
@@ -25,9 +29,9 @@ build-program: export
 # Verify the exported proof in JS too (snarkjs interop) — optional.
 verify-snarkjs: prove
     cd circuit && snarkjs groth16 verify \
-        target/groth16/snarkjs-verification_key.json \
-        target/groth16/snarkjs-public.json \
-        target/groth16/snarkjs-proof.json
+        target/xark/over_9000/snarkjs-verification_key.json \
+        target/xark/over_9000/snarkjs-public.json \
+        target/xark/over_9000/snarkjs-proof.json
 
 clean:
     rm -rf circuit/target program/target

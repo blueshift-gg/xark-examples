@@ -1,5 +1,5 @@
 # Build every example end to end, then run the in-process (LiteSVM) test suite.
-# Requires the toolchain in RUNBOOK.md (nargo 1.0.0-beta.22, xark, anza CLI).
+# Requires the toolchain in RUNBOOK.md (xark + its pinned nightly, anza CLI).
 #
 # This is the orchestrator: each recipe delegates to the example's own justfile,
 # which stays self-contained so it reads top-to-bottom on its own.
@@ -21,13 +21,48 @@ build-all:
     cd 04-shielded-transfer && just gen-chain
     cd 04-shielded-transfer && just build-program
 
-# Run every circuit's `nargo test` (fast, needs only nargo).
+# Run every circuit's in-crate tests (xark build + cargo test via xark-prover).
 test-circuits:
-    cd 01-over-9000/circuit && nargo test
-    cd 02-age-verification/circuit && nargo test
-    cd 03-shielded-pool/circuits/deposit && nargo test
-    cd 03-shielded-pool/circuits/withdraw && nargo test
-    cd 04-shielded-transfer/circuits/transact && nargo test
+    xark test 01-over-9000/circuit
+    xark test 02-age-verification/circuit
+
+# Validate every circuit against xark's supported Rust subset.
+check-circuits:
+    xark check 01-over-9000/circuit
+    xark check 02-age-verification/circuit
+    xark check 03-shielded-pool/circuits/deposit
+    xark check 03-shielded-pool/circuits/withdraw
+    xark check 04-shielded-transfer/circuits/transact
+
+# One formatting gate for all standalone crates/workspaces.
+fmt-check:
+    cargo fmt --check --manifest-path 01-over-9000/circuit/Cargo.toml
+    cargo fmt --check --manifest-path 01-over-9000/program/Cargo.toml
+    cargo fmt --check --manifest-path 02-age-verification/circuit/Cargo.toml
+    cargo fmt --check --manifest-path 02-age-verification/program/Cargo.toml
+    cargo fmt --check --manifest-path 03-shielded-pool/circuits/deposit/Cargo.toml
+    cargo fmt --check --manifest-path 03-shielded-pool/circuits/merkle/Cargo.toml
+    cargo fmt --check --manifest-path 03-shielded-pool/circuits/withdraw/Cargo.toml
+    cargo fmt --check --manifest-path 03-shielded-pool/program/Cargo.toml
+    cargo fmt --check --manifest-path 04-shielded-transfer/circuits/transact/Cargo.toml
+    cargo fmt --check --manifest-path 04-shielded-transfer/program/Cargo.toml
+    cargo fmt --check --manifest-path e2e/Cargo.toml
+    cargo fmt --check --manifest-path vendor/xark-verifier/Cargo.toml
+
+# Run after `build-all`, which generates the verifier crates used by programs.
+clippy:
+    cargo clippy --manifest-path 01-over-9000/circuit/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 01-over-9000/program/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 02-age-verification/circuit/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 02-age-verification/program/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 03-shielded-pool/circuits/deposit/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 03-shielded-pool/circuits/merkle/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 03-shielded-pool/circuits/withdraw/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 03-shielded-pool/program/Cargo.toml --workspace --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 04-shielded-transfer/circuits/transact/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path 04-shielded-transfer/program/Cargo.toml --workspace --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path e2e/Cargo.toml --all-targets --locked -- -D warnings
+    cargo clippy --manifest-path vendor/xark-verifier/Cargo.toml --all-targets -- -D warnings
 
 clean:
     cd 01-over-9000 && just clean

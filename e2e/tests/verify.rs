@@ -17,13 +17,18 @@ use solana_signer::Signer;
 
 /// Load `so` into LiteSVM and submit `ix_data`. Returns whether the tx succeeded.
 fn submit(so: &[u8], ix_data: Vec<u8>) -> bool {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new().with_mainnet_features();
     let program_id = Keypair::new().pubkey();
     svm.add_program(program_id, so).expect("load program");
     let payer = Keypair::new();
-    svm.airdrop(&payer.pubkey(), 1_000_000_000).expect("airdrop");
+    svm.airdrop(&payer.pubkey(), 1_000_000_000)
+        .expect("airdrop");
 
-    let ix = Instruction { program_id, accounts: vec![], data: ix_data };
+    let ix = Instruction {
+        program_id,
+        accounts: vec![],
+        data: ix_data,
+    };
     send(&mut svm, ix, &payer).is_ok()
 }
 
@@ -49,7 +54,7 @@ fn assert_verifies(so_rel: &str, ix_rel: &str) {
 fn over_9000_verifies_on_chain() {
     assert_verifies(
         "01-over-9000/program/target/deploy/over_9000_program.so",
-        "01-over-9000/circuit/target/over_9000-xark-verifier/instruction_data.bin",
+        "01-over-9000/circuit/target/xark/over_9000/verifier/instruction_data.bin",
     );
 }
 
@@ -57,6 +62,6 @@ fn over_9000_verifies_on_chain() {
 fn age_verification_verifies_on_chain() {
     assert_verifies(
         "02-age-verification/program/target/deploy/age_verification_program.so",
-        "02-age-verification/circuit/target/age_verification-xark-verifier/instruction_data.bin",
+        "02-age-verification/circuit/target/xark/age_verification/verifier/instruction_data.bin",
     );
 }

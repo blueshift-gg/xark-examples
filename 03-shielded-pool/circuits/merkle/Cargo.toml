@@ -1,0 +1,16 @@
+# Shared Merkle-tree gadget for the pool's two circuits — an ordinary Rust
+# library the xark compiler inlines, exactly like xark's own gadget crates.
+[package]
+name = "pool-merkle"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+xark = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03", default-features = false }
+xark-poseidon2 = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }

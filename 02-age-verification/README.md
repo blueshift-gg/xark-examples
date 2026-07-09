@@ -21,21 +21,30 @@ commitment = Poseidon2(birth_year, nonce)
 
 ## The circuit
 
-```noir
-fn main(birth_year: u32, nonce: Field, commitment: pub Field, current_year: pub u32) {
+```rust
+use xark::prelude::*;
+use xark_poseidon2::hash2;
+
+pub fn circuit(
+    birth_year: Private<Field>,
+    nonce: Private<Field>,
+    commitment: Public<Field>,
+    current_year: Public<Field>,
+) {
     // Prove we know the opening of the published commitment.
-    // hash2(a, b) = std::hash::poseidon2_permutation([a, b, 0, 0])[0]
-    assert(hash2(birth_year as Field, nonce) == commitment);
-    // Then the range check — same mechanism as example 01.
-    assert(current_year >= birth_year);
-    assert(current_year - birth_year >= 18);
+    assert_eq(hash2(birth_year, nonce), commitment);
+    // Then the range check — same mechanism as example 01. The explicit ::<32>
+    // width bounds both years, so the subtraction below cannot wrap the field.
+    assert(current_year.ge::<32>(birth_year));
+    assert(current_year - birth_year >= 18u32);
 }
 ```
 
 Two public inputs (`commitment`, `current_year`), two private (`birth_year`, `nonce`). The first
 assertion is the load-bearing one: it binds the range check to a *specific published commitment*, so
 unlike example 01 you can't invent a convenient number — you have to know the opening of a commitment
-someone already trusts.
+someone already trusts. `hash2` comes from the `xark-poseidon2` gadget crate — an ordinary Rust
+library the compiler inlines into the circuit.
 
 The idea to carry forward: **a ZK proof guarantees consistency, not honesty.** It proves the birth
 year inside the commitment is at least 18 years ago; it says nothing about whether the commitment
@@ -52,24 +61,22 @@ program stubs out (both flagged in `program/src/lib.rs`):
    back- or post-date.
 
 Want to drop the trusted issuer entirely? Have the circuit verify an **issuer signature** over the
-birth year instead of a commitment — xark supports the `EcdsaSecp256k1`/`EcdsaSecp256r1` black-boxes
-(~3.6M / 5.4M constraints). That's the verifiable-credentials / zk-KYC path.
+birth year instead of a commitment — xark ships secp256k1/secp256r1 ECDSA gadget crates (see the
+`ecdsa_*` examples in the xark repo). That's the verifiable-credentials / zk-KYC path.
 
 ## Run it
 
 ```bash
-just commit         # compute Poseidon2(birth_year, nonce) with Noir's own hash
-                    #   → paste the printed field into circuit/Prover.toml as `commitment`
-just prove
-just export
-just build-program
+just commit         # compute Poseidon2(birth_year, nonce)
+                    #   → paste the printed field into the justfile as `commitment`
+just build-program  # complete circuit → program build
 cd ../e2e && cargo test age_verification   # verify in a real Solana VM
+just test-circuit   # in-crate tests: adult passes / minor fails / wrong opening
 ```
 
-`just commit` computes the commitment with the *same* Poseidon the circuit uses, so the two always
-agree — there's no cross-tool hash-parameter matching to get wrong. (On nargo beta.22 the stdlib
-exposes only the Poseidon2 permutation, so `hash2` is a fixed-arity compression over it:
-`poseidon2_permutation([a, b, 0, 0])[0]`.)
+`just commit` computes the commitment with a native mirror of the circuit's own gadget hash,
+pinned to the gadget's known-answer vector — so the two can never silently disagree (see
+`e2e/src/poseidon2.rs`).
 
 To deploy to devnet, `solana program deploy` the `.so` and submit the 320-byte `instruction_data.bin`
 (256-byte proof + two 32-byte public inputs).

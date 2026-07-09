@@ -4,27 +4,39 @@ on:
   push:
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+  XARK_REV: 44f9a8d3b1f5af90a57249fa1dad308968922a03
+
 jobs:
-  # Circuit tests need only nargo — no xark, no Solana toolchain.
-  circuits:
+  test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Install nargo 1.0.0-beta.22
-        run: |
-          curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
-          echo "$HOME/.nargo/bin" >> "$GITHUB_PATH"
-          "$HOME/.nargo/bin/noirup" -v 1.0.0-beta.22
-      - name: nargo test (all circuits)
-        run: |
-          for d in 01-over-9000/circuit \
-                   02-age-verification/circuit \
-                   03-shielded-pool/circuits/deposit \
-                   03-shielded-pool/circuits/withdraw; do
-            (cd "$d" && nargo test)
-          done
 
-  # The full prove → export → build-sbf → `cargo test` pipeline also needs the
-  # xark CLI (currently a private, sibling-path dependency) and the Anza CLI.
-  # Enable this job once xark is reachable to the runner (submodule or published
-  # crate); the steps are the `just build-all && cd e2e && cargo test` flow.
+      - name: Install Rust tooling
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt
+          rustup toolchain install nightly-2026-05-03 --profile minimal --component rust-src --component rustc-dev --component llvm-tools
+          cargo install just --version 1.43.1 --locked
+
+      - name: Install pinned xark
+        run: cargo +nightly-2026-05-03 install --git https://github.com/blueshift-gg/xark --rev "$XARK_REV" xark --locked --features cli
+
+      - name: Install pinned Solana program builder
+        run: cargo install cargo-build-sbf --version 4.0.0 --locked
+
+      - name: Formatting
+        run: just fmt-check
+
+      - name: Circuit checks and tests
+        run: |
+          just check-circuits
+          just test-circuits
+
+      - name: Full proof and LiteSVM suite
+        run: just test
+
+      - name: Clippy
+        run: just clippy

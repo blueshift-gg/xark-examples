@@ -6,7 +6,7 @@ is the first real privacy primitive in the ladder: it combines proofs ([01](../0
 commitments ([02](../02-age-verification/)) with Merkle membership and nullifiers.
 
 > **Reference implementation. Unaudited. Educational.** Mixers carry real legal and regulatory weight
-> depending on where you are. Never use `--insecure-dev-mode` keys for anything that holds value.
+> depending on where you are. Never use dev-mode keys for anything that holds value.
 
 ## How it works
 
@@ -25,7 +25,7 @@ why a mixer is only as private as it is used.
 
 A shielded pool is a Merkle tree, and the classic trap is that the Poseidon in your circuit and the
 Poseidon on-chain must be **byte-for-byte identical** or the roots never match. Instead of
-reimplementing Barretenberg's Poseidon2 inside a Solana program, keep *all* hashing in Noir:
+reimplementing Poseidon2 inside a Solana program, keep *all* hashing in the circuits:
 
 - **`deposit` circuit** proves "`new_root` is the correct result of appending `leaf` at `index` to
   the tree rooted at `old_root`." It binds the depositor-supplied frontier (the left siblings on the
@@ -39,9 +39,15 @@ nullifier. It verifies proofs and moves lamports — zero Poseidon on-chain, tin
 agreement holds *by construction* instead of by careful matching.
 
 ```
-deposit:   nargo builds new_root ─▶ deposit proof ─▶ program checks proof, stores new_root
-withdraw:  nargo builds path     ─▶ withdraw proof ─▶ program checks proof + nullifier, pays out
+deposit:   wallet builds new_root ─▶ deposit proof ─▶ program checks proof, stores new_root
+withdraw:  wallet builds path     ─▶ withdraw proof ─▶ program checks proof + nullifier, pays out
 ```
+
+**Hash domains.** All three object kinds share one Poseidon2 but can never collide: tree nodes use
+the 2-to-1 compression (`hash2`, capacity tag 0), commitments use the length-tagged sponge over two
+elements (`hash::<2>`, tag 2), and nullifier hashes over one (`hash::<1>`, tag 1). The Merkle pieces
+live in [`circuits/merkle`](./circuits/merkle/) — an ordinary Rust crate both circuits import, and
+which [04](../04-shielded-transfer/) reuses wholesale.
 
 **Front-run protection.** Recipient and relayer are each split into two 128-bit halves (a Solana
 pubkey is 256-bit, wider than the BN254 field) and passed as public inputs. Groth16 binds public
@@ -56,6 +62,7 @@ amounts need value-carrying notes, which is [04](../04-shielded-transfer/).
 ## Anatomy
 
 ```
+circuits/merkle/     the shared Merkle gadget (hash2 tree, zeros table, frontier append, mux)
 circuits/deposit/    proves a correct tree append   (public: old_root, new_root, leaf, index)
 circuits/withdraw/   proves membership + nullifier   (public: root, nullifier_hash, recipient×2, relayer×2, fee)
 program/             Anchor: verify both proofs, hold + pay lamports, track roots & nullifiers
@@ -70,9 +77,10 @@ just build-program
 cd ../e2e && cargo test shielded_pool_full_flow   # init → deposit → withdraw → double-spend rejected
 ```
 
-Witness values (paths, roots, nullifiers) are generated with nargo — the same Poseidon as the
-circuit, so they always agree; see the worked index-0 example in
-[`../e2e/tests/pool.rs`](../e2e/tests/pool.rs), which doubles as the reference client. To deploy,
+Witness values (frontiers, paths, roots, nullifiers) come from `pool-witness` in
+[`../e2e`](../e2e/) — a native mirror of the circuits' Poseidon2, pinned to the gadget's own
+known-answer vector, so wallet and circuit always agree. The e2e test
+([`../e2e/tests/pool.rs`](../e2e/tests/pool.rs)) doubles as the reference client. To deploy,
 `anchor deploy` and drive `initialize → deposit → withdraw`; the exact instruction encodings and
 account metas are in that test.
 
@@ -84,9 +92,13 @@ proof.
 
 **Doesn't:** hide amounts across denominations (fixed size per pool); resist timing/amount
 correlation if the set is tiny or you withdraw instantly; offer any compliance layer (viewing keys,
-association sets are deliberately out of scope); or carry an audit. `ZERO` (the empty-leaf sentinel)
-is `0` here for clarity — a production pool uses a nothing-up-my-sleeve nonzero value so no real
-commitment can collide with an empty slot.
+association sets are deliberately out of scope); or carry an audit. The empty-leaf sentinel is the
+transparent nonzero field constant encoded by ASCII `xarkzero`, shared by the circuits and wallet.
+
+**Submission model.** A deposit proof binds the current tree root and next index. Clients must
+sequence deposits, fetch the latest pool state immediately before proving, and reprove if another
+deposit advances the tip first. This is a clear single-writer reference protocol; a high-throughput
+deployment needs a sequencer/batcher or a different append design.
 
 ## Reference
 

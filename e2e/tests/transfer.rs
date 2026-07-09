@@ -12,8 +12,8 @@ use common::{borsh_bytes, chunk32, disc, read, send, u64_at};
 
 use std::str::FromStr;
 
-use litesvm::LiteSVM;
 use litesvm::types::TransactionResult;
+use litesvm::LiteSVM;
 use solana_account::Account;
 use solana_address::Address;
 use solana_instruction::{AccountMeta, Instruction};
@@ -24,14 +24,19 @@ const PROGRAM_ID: &str = "CUCcJJBRbK6tK4nPP2zgmvdYbKWSCGGVdRegtJ2GPJtF";
 const TOKEN_PROGRAM: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const RENT_SYSVAR: &str = "SysvarRent111111111111111111111111111111111";
 const SYSTEM: &str = "11111111111111111111111111111111";
-const MINT_PUBKEY: [u8; 32] = [
-    123, 236, 127, 84, 75, 150, 142, 114, 96, 47, 36, 185, 180, 0, 184, 185, 219, 76, 85, 214, 104,
-    64, 213, 210, 101, 226, 248, 208, 110, 243, 181, 54,
-];
+// Shared with the witness generator (`transfer-witness`) so the circuit's
+// `asset` tag and the on-chain mint always agree.
+use xark_examples_e2e::fixtures::{BOB_TOKEN_PUBKEY, MINT_PUBKEY, RECIPIENT};
 const CHAIN: &str = "04-shielded-transfer/circuits/transact/chain";
 
 fn tok(lamports: u64, data: Vec<u8>) -> Account {
-    Account { lamports, data, owner: Address::from_str(TOKEN_PROGRAM).unwrap(), executable: false, rent_epoch: 0 }
+    Account {
+        lamports,
+        data,
+        owner: Address::from_str(TOKEN_PROGRAM).unwrap(),
+        executable: false,
+        rent_epoch: 0,
+    }
 }
 fn mint_data(auth: &[u8; 32]) -> Vec<u8> {
     let mut d = vec![1, 0, 0, 0];
@@ -59,6 +64,7 @@ fn token_amount(a: &Account) -> u64 {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::result_large_err)]
 fn transact(
     svm: &mut LiteSVM,
     program_id: Address,
@@ -128,19 +134,33 @@ fn shielded_transfer_flow() {
     let rent = Address::from_str(RENT_SYSVAR).unwrap();
     let mint = Address::new_from_array(MINT_PUBKEY);
 
-    let mut svm = LiteSVM::new();
-    svm.add_program(program_id, &read("04-shielded-transfer/program/target/deploy/shielded_transfer.so"))
-        .unwrap();
+    let mut svm = LiteSVM::new().with_mainnet_features();
+    svm.add_program(
+        program_id,
+        &read("04-shielded-transfer/program/target/deploy/shielded_transfer.so"),
+    )
+    .unwrap();
 
     let alice = Keypair::new();
     svm.airdrop(&alice.pubkey(), 5_000_000_000).unwrap();
-    svm.set_account(mint, tok(10_000_000, mint_data(&alice.pubkey().to_bytes()))).unwrap();
+    svm.set_account(mint, tok(10_000_000, mint_data(&alice.pubkey().to_bytes())))
+        .unwrap();
     let alice_token = Keypair::new().pubkey();
-    svm.set_account(alice_token, tok(10_000_000, token_data(&MINT_PUBKEY, &alice.pubkey().to_bytes(), 150)))
-        .unwrap();
-    let bob_token = Keypair::new().pubkey();
-    svm.set_account(bob_token, tok(10_000_000, token_data(&MINT_PUBKEY, &alice.pubkey().to_bytes(), 0)))
-        .unwrap();
+    svm.set_account(
+        alice_token,
+        tok(
+            10_000_000,
+            token_data(&MINT_PUBKEY, &alice.pubkey().to_bytes(), 150),
+        ),
+    )
+    .unwrap();
+    let bob_token = Address::new_from_array(BOB_TOKEN_PUBKEY);
+    let bob_owner: [u8; 32] = RECIPIENT[32..].try_into().unwrap();
+    svm.set_account(
+        bob_token,
+        tok(10_000_000, token_data(&MINT_PUBKEY, &bob_owner, 0)),
+    )
+    .unwrap();
 
     let (pool, _) = Address::find_program_address(&[b"pool", mint.as_ref()], &program_id);
     let (vault, _) = Address::find_program_address(&[b"vault", mint.as_ref()], &program_id);
@@ -166,23 +186,76 @@ fn shielded_transfer_flow() {
     .expect("initialize");
 
     // 1) deposit: Alice shields 150
-    transact(&mut svm, program_id, mint, pool, vault, &alice, alice_token, bob_token, "dep")
-        .expect("deposit");
-    assert_eq!(token_amount(&svm.get_account(&vault).unwrap()), 150, "vault funded by deposit");
-    assert_eq!(token_amount(&svm.get_account(&alice_token).unwrap()), 0, "alice drained");
+    transact(
+        &mut svm,
+        program_id,
+        mint,
+        pool,
+        vault,
+        &alice,
+        alice_token,
+        bob_token,
+        "dep",
+    )
+    .expect("deposit");
+    assert_eq!(
+        token_amount(&svm.get_account(&vault).unwrap()),
+        150,
+        "vault funded by deposit"
+    );
+    assert_eq!(
+        token_amount(&svm.get_account(&alice_token).unwrap()),
+        0,
+        "alice drained"
+    );
 
     // 2) transfer: Alice privately pays Bob 100 (50 change) — no tokens move
-    transact(&mut svm, program_id, mint, pool, vault, &alice, alice_token, bob_token, "xfer")
-        .expect("transfer");
-    assert_eq!(token_amount(&svm.get_account(&vault).unwrap()), 150, "vault unchanged by shielded transfer");
+    transact(
+        &mut svm,
+        program_id,
+        mint,
+        pool,
+        vault,
+        &alice,
+        alice_token,
+        bob_token,
+        "xfer",
+    )
+    .expect("transfer");
+    assert_eq!(
+        token_amount(&svm.get_account(&vault).unwrap()),
+        150,
+        "vault unchanged by shielded transfer"
+    );
 
     // 3) withdraw: Bob unshields 100 to bob_token
-    transact(&mut svm, program_id, mint, pool, vault, &alice, alice_token, bob_token, "wd")
-        .expect("withdraw");
-    assert_eq!(token_amount(&svm.get_account(&bob_token).unwrap()), 100, "bob received the withdrawal");
-    assert_eq!(token_amount(&svm.get_account(&vault).unwrap()), 50, "50 remains shielded (Alice's change)");
+    transact(
+        &mut svm,
+        program_id,
+        mint,
+        pool,
+        vault,
+        &alice,
+        alice_token,
+        bob_token,
+        "wd",
+    )
+    .expect("withdraw");
+    assert_eq!(
+        token_amount(&svm.get_account(&bob_token).unwrap()),
+        100,
+        "bob received the withdrawal"
+    );
+    assert_eq!(
+        token_amount(&svm.get_account(&vault).unwrap()),
+        50,
+        "50 remains shielded (Alice's change)"
+    );
 
     // tree advanced by 6 leaves (2 per transact)
     let pool_acct = svm.get_account(&pool).unwrap();
-    assert_eq!(u32::from_le_bytes(pool_acct.data[40..44].try_into().unwrap()), 6);
+    assert_eq!(
+        u32::from_le_bytes(pool_acct.data[40..44].try_into().unwrap()),
+        6
+    );
 }

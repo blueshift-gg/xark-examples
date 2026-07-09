@@ -1,7 +1,0 @@
-[package]
-name = "over_9000"
-type = "bin"
-authors = ["Blueshift"]
-# Compiler pin: see the repo README. xark tracks nargo 1.0.0-beta.22.
-
-[dependencies]

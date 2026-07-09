@@ -1,6 +1,0 @@
-[package]
-name = "age_verification"
-type = "bin"
-authors = ["Blueshift"]
-
-[dependencies]

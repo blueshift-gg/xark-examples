@@ -6,7 +6,7 @@
 #![cfg_attr(not(test), no_std)]
 
 use age_verification_xark_verifier as verifier;
-use pinocchio::{error::ProgramError, program_entrypoint, AccountView, Address, ProgramResult};
+use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError, program_entrypoint};
 
 const PROOF_LEN: usize = 256;
 const FR: usize = 32;

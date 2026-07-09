@@ -5,22 +5,29 @@ that still does something real, and the range-proof mechanism under every later 
 
 ## The circuit
 
-```noir
-fn main(power_level: u64) {
-    assert(power_level > 9000);
+```rust
+use xark::prelude::*;
+
+#[circuit]
+pub fn circuit(power_level: Private<Field>) {
+    assert(power_level > 9000u64);
 }
 ```
 
-Four lines, three ideas:
+A few lines, three ideas:
 
-- **No `pub` means private.** `power_level` is the *witness* — an input the proof is computed from
-  but never reveals. The verifier ends up convinced the assertion held without learning the number.
-- **The type is a constraint.** `u64` forces `power_level` into `[0, 2⁶⁴)`, and that bound is what
-  makes `>` sound: field elements wrap around, so without a range "greater than" has no meaning. `>`
-  lowers to ACIR's `RANGE` opcode, which xark compiles to R1CS and proves. Every range proof —
-  balances, ages, prices — is this one trick.
+- **`Private` means witness.** `power_level` is an input the proof is computed from but never
+  reveals. The verifier ends up convinced the assertion held without learning the number.
+- **The width is a constraint.** A `Field` wraps around, so "greater than" has no meaning until you
+  fix a range — in xark the *comparison operand's type* supplies it: `> 9000u64` range-checks
+  `power_level` into `[0, 2⁶⁴)` (a 64-bit decomposition in R1CS) and only then orders it. Every
+  range proof — balances, ages, prices — is this one trick.
 - **Zero public inputs.** `9000` is a literal, so it is fixed inside the verifying key. Only the
   256-byte proof reaches the chain.
+
+It's ordinary Rust: `xark build` type-checks it with rustc itself, extracts the MIR, and lowers it
+to constraints. `xark check` surfaces anything outside the provable subset as a normal compiler
+diagnostic, in your editor.
 
 ## What it does and doesn't prove
 
@@ -32,25 +39,27 @@ published commitment ([02](../02-age-verification/)) or a Merkle tree of deposit
 ## Run it
 
 ```bash
-just prove          # compile → witness → dev keys → prove → verify
-just export         # → verifier crate + instruction_data.bin
-just build-program  # → deployable .so
+just build-program  # build → dev setup → prove/self-check → export → deployable .so
 cd ../e2e && cargo test over_9000   # verify the proof in a real Solana VM
+just test-circuit   # proving 9001 succeeds; proving 9000 fails
 ```
 
-Prerequisites and toolchain versions: [../RUNBOOK.md](../RUNBOOK.md).
+Prerequisites and toolchain versions: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks them).
 
 ## Experiments
 
-- Set `power_level = 9000` and re-run `just prove` — proving fails, because no witness satisfies the
-  circuit. That failure *is* the guarantee: you cannot prove a false statement.
+- `just test-circuit` runs the in-crate tests: proving with 9001 succeeds, with 9000 it must fail -
+  no witness satisfies the circuit. That failure *is* the guarantee: you cannot prove a false
+  statement. Put `power_level = 9000` in an input file and pass it with `--input-file` for the CLI
+  version.
 - `just verify-snarkjs` checks the same proof in JavaScript. xark's artifacts are snarkjs-compatible,
-  so one proof verifies in both a Solana program and a browser.
+  so one proof verifies in both a Solana program and a browser. (`xark client circuit` scaffolds a
+  TypeScript client around the same files.)
 
 ## Layout
 
 ```
-circuit/   the Noir circuit (src/main.nr) + inputs (Prover.toml)
+circuit/   the circuit crate (src/lib.rs — plain Rust, plus its prove-tests)
 program/   Pinocchio verifier — one verify_instruction_data call, minimal CU
 justfile   prove · export · build-program
 ```

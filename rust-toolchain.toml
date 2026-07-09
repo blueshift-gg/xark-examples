@@ -1,5 +1,7 @@
-# Programs need edition 2024 (rustc ≥ 1.85); the e2e crate's Solana/LiteSVM deps
-# need a recent stable. `stable` satisfies both; the committed Cargo.lock files
-# pin the actual dependency versions.
+# Host-side builds, formatting, linting, and LiteSVM tests use this exact stable
+# toolchain. xark invokes its own pinned nightly; cargo-build-sbf invokes its
+# pinned Solana platform toolchain.
 [toolchain]
-channel = "stable"
+channel = "1.95.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

@@ -7,7 +7,5 @@ overflow-checks = true
 lto = "fat"
 codegen-units = 1
 
-# The verifier crates `xark export` generates depend on `xark-verifier = "0.1"`.
-# Until that's published, assumes xark is cloned as a sibling repo.
-[patch.crates-io]
-xark-verifier = { path = "../../../xark/crates/verifier" }
+[patch."https://github.com/blueshift-gg/xark"]
+xark-verifier = { path = "../../vendor/xark-verifier" }

@@ -6,8 +6,8 @@ paid whom, or how much. Where [03](../03-shielded-pool/) is a fixed-denomination
 Zcash/Sapling-style shielded pool: notes with hidden values, a key hierarchy, and shielded→shielded
 transfers.
 
-> **Reference implementation. Unaudited. Educational.** Do not hold value in this. See "Known gaps" —
-> some are load-bearing.
+> **Production-quality educational reference, not an audited product.** It uses development setup
+> keys and deliberately omits wallet, ceremony, governance, and compliance infrastructure.
 
 ## One primitive: `transact` (JoinSplit)
 
@@ -30,8 +30,9 @@ to keep a fixed 2-in / 2-out shape whatever the operation.
 
 ## What the circuit proves
 
-- **Notes.** A note is `cm = H(value, asset, owner_addr, rho, rseed)` (a Poseidon2 sponge). `rho` and
-  `rseed` are randomness that keep otherwise-identical notes distinct and unlinkable.
+- **Notes.** A note is `cm = H(value, asset, owner_addr, rho, rseed)` (the length-tagged Poseidon2
+  sponge plus an explicit domain constant). `rho` and `rseed` are randomness that keep
+  otherwise-identical notes distinct and unlinkable.
 - **Key hierarchy (Sapling-lite).** `sk → nk` (nullifier key) and `ivk` (incoming viewing key); an
   address is `addr = H(ivk, d)`. Only the holder of `sk` can derive the keys to spend a note sent to
   their address — spend authority and view authority are separate.
@@ -40,20 +41,24 @@ to keep a fixed 2-in / 2-out shape whatever the operation.
   yet unlinkable to the commitment without `nk`.
 - **The rest, in one shot.** Membership of each real input in a remembered root; value conservation
   (the balance identity above); range proofs on output values (so you can't forge value by
-  overflowing the field); and — 03's trick again, twice — that the two output commitments are
-  correctly appended (`old_root → new_root` via a private frontier), so the chain never hashes.
+  overflowing the field); and — 03's trick again — that the two output commitments are correctly
+  appended (`old_root → new_root` via a private frontier), so the chain never hashes. Because the
+  program always appends notes two at a time, `insert_index` stays even and the pair folds in as one
+  level-1 node (`hash2(cm0, cm1)`), halving the membership work.
 
-Twelve public inputs: `root, asset, nf[2], cm_out[2], old_root, new_root, insert_index, vpub_in,
-vpub_out, fee`.
+Eighteen public inputs: `root, asset, nf[2], cm_out[2], old_root, new_root, insert_index, vpub_in,
+vpub_out, fee, recipient_hi, recipient_lo, memo0_hash_hi, memo0_hash_lo, memo1_hash_hi,
+memo1_hash_lo`. The circuit is ordinary Rust importing 03's Merkle gadget crate; `xark profile`
+attributes every constraint to a source line.
 
 ## Delivery: encrypted memos, off-circuit
 
 How does the recipient learn the `rho`/`rseed`/value of the note you made for them? The sender
-attaches an encrypted memo — `(epk, ciphertext)`, emitted here as a `MemoEvent` — and the recipient
-trial-decrypts every memo with their viewing key to find the ones addressed to them. This is exactly
-Zcash's design, and it's off-circuit on purpose: **funds security** (commitments + nullifiers) is
-fully enforced in the proof, while **delivery** is only a channel, so no expensive in-circuit AEAD is
-needed.
+attaches an encrypted memo envelope containing the ephemeral key and ciphertext, emitted here as a
+`MemoEvent`, and the recipient trial-decrypts every envelope. SHA-256 hashes of both envelopes are
+bound into the proof as four 128-bit limbs. The program recomputes those hashes, so a submitter can
+relay the transaction but cannot replace delivery data or redirect `recipient_token`. Encryption and
+decryption remain off-circuit, so no expensive in-circuit AEAD is needed.
 
 ## SPL
 
@@ -65,41 +70,43 @@ into the vault; withdrawals `transfer` out, signed by the pool PDA.
 
 ```bash
 just all
-# setup (dev keys) → build the deposit/transfer/withdraw proof chain →
+# xark build + setup (dev keys) → build the deposit/transfer/withdraw proof chain →
 # export verifier + build program → run the in-VM e2e (shielded_transfer_flow)
 ```
 
 The e2e ([`../e2e/tests/transfer.rs`](../e2e/tests/transfer.rs)) runs the whole story in LiteSVM:
 Alice shields 150 → privately pays Bob 100 with 50 change (no tokens move) → Bob withdraws 100; the
-vault ends at 50, Alice's change still shielded. That Rust test doubles as the reference wallet
-(key/note/witness construction), and `scripts/gen_chain.py` builds the three witnesses by replaying
-an evolving tree.
+vault ends at 50, Alice's change still shielded. The `transfer-witness` bin in [`../e2e`](../e2e/)
+is the reference wallet: it replays the evolving tree natively (same KAT-pinned Poseidon2 as the
+circuit) and writes each transaction's flat `xark prove --input-file` document.
 
 ## Anatomy
 
 ```
 circuits/transact/   the JoinSplit circuit (notes, keys, nullifiers, balance, range,
-                     membership, 2-leaf insertion); tests + chain simulator in src/tests.nr
+                     membership, pair insertion) — imports 03's circuits/merkle gadget
 program/             Anchor + SPL: verify, burn nullifiers, advance tree, move SPL for
                      vpub in/out, emit memo events
-scripts/gen_chain.py builds the 3 witnesses/proofs for the e2e
+../e2e               transfer-witness (wallet-side chain replay) + the LiteSVM e2e
 ```
 
-## Known gaps
+## Deployment boundaries
 
-Deliberate scope cuts for a teachable reference — and the honest list of what a production version
-must add:
+The protocol path is complete, but a deployed product still needs the surrounding operational
+system:
 
-- **The withdrawal recipient is not bound into the proof.** `vpub_out` pays whichever
-  `recipient_token` account the transaction names, so a front-runner could redirect a withdrawal. The
-  fix is to add the recipient as a public input the circuit binds, exactly as
-  [03](../03-shielded-pool/) does. **Top hardening item.**
 - **Fixed 2-in / 2-out, one asset per transaction** (`asset` is public per tx).
-- **Dev trusted setup** (`--insecure-dev-mode`) — forgeable; a real deployment needs `xark ceremony`.
-- **Memo encryption** is left to a standard off-circuit AEAD (x25519 + ChaCha); the in-circuit `epk`
-  binding Zcash adds for robustness is a later layer (the embedded-curve op is validated as
-  available).
-- Unaudited, and `nk`/`ivk` derivation is a simplified Sapling, not the full spec.
+- **Dev trusted setup** — forgeable; a real deployment needs `xark ceremony`.
+- **Fee routing is not implemented** — `fee` is bound in-circuit (the slot a relayer flow needs) but
+  the program requires it to be 0 rather than silently ignoring it.
+- **Memo encryption** is a wallet concern. The proof binds the complete encrypted envelope hash, but
+  the example does not implement x25519/ChaCha encryption, key storage, or trial-decryption UX.
+- **Single-writer tree tip.** Each proof binds the current append root and index. A relayer must
+  sequence transactions, and clients must reprove when another transaction advances the tip first.
+  Higher throughput needs a sequencer/batcher or a different append architecture.
+- **Protocol review and operations.** The simplified `nk`/`ivk` derivation is not the full Sapling
+  specification; a deployment also needs an audit, ceremony, upgrade policy, monitoring, and legal
+  review.
 
 ## Reference
 
@@ -115,7 +122,8 @@ append `cm_out[0..2]` (advancing `old_root → new_root`), move SPL for the publ
 the two memos. Accounts: `pool` (mut), `vault` (mut), `nullifier0`/`nullifier1` (init, PDA), `user`
 (signer, payer), `user_token` (mut, source for `vpub_in`), `recipient_token` (mut, dest for
 `vpub_out`), `token_program`, `system_program`. Public inputs:
-`root, asset, nf0, nf1, cm0, cm1, old_root, new_root, index, vpub_in, vpub_out, fee`.
+`root, asset, nf0, nf1, cm0, cm1, old_root, new_root, index, vpub_in, vpub_out, fee`, both limbs of
+`recipient_token`, and both limbs of each memo envelope's SHA-256 hash.
 
 ### PDAs & state
 
@@ -130,8 +138,8 @@ the two memos. Accounts: `pool` (mut), `vault` (mut), `nullifier0`/`nullifier1` 
 
 ### Events & errors
 
-`MemoEvent { leaf_index: u32, commitment: [u8;32], ciphertext: Vec<u8> }` — one per output note; the
-`ciphertext` is the off-circuit encrypted memo the recipient trial-decrypts.
+`MemoEvent { leaf_index: u32, commitment: [u8;32], encrypted_memo: Vec<u8> }` — one per output note;
+the envelope contains the ephemeral key and ciphertext the recipient trial-decrypts.
 
 | Error | Message |
 |---|---|
@@ -139,5 +147,6 @@ the two memos. Accounts: `pool` (mut), `vault` (mut), `nullifier0`/`nullifier1` 
 | `InvalidProof` | invalid proof |
 | `UnknownRoot` | unknown or stale merkle root |
 | `TreeFull` | tree is full |
+| `FeeNotSupported` | fee routing is not implemented; pass fee = 0 |
 
 Back to the [index](../README.md).

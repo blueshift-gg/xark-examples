@@ -1,6 +1,10 @@
 # End-to-end tests: load each example's compiled program into an in-process
 # Solana VM (LiteSVM) and verify a real xark proof runs through the native
 # alt_bn128 syscalls — no validator, no network. Run with `cargo test`.
+#
+# The lib target is the examples' tiny "wallet SDK": a native Poseidon2
+# (generated from the xark gadget, KAT-pinned) plus the client-side helpers the
+# tests and the `commit` bin share.
 [package]
 name = "xark-examples-e2e"
 version = "0.0.0"
@@ -9,11 +13,17 @@ publish = false
 
 [workspace]
 
+# Client-side field arithmetic for witness generation (commitments, Merkle
+# trees, nullifiers) — same arkworks generation xark's backend uses.
+[dependencies]
+ark-bn254 = { version = "0.6", default-features = false, features = ["curve"] }
+ark-ff = { version = "0.6", default-features = false }
+sha2 = "0.10"
+
 # Versions pinned to match litesvm 0.13's modular Anza crates so the types
 # unify (mismatched solana-* versions = compile errors).
 [dev-dependencies]
 litesvm = "0.13"
-sha2 = "0.10"
 solana-account = "3.4"
 solana-address = "2.2"
 solana-instruction = "3.2"

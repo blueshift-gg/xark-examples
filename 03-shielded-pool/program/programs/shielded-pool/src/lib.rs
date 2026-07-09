@@ -1,8 +1,15 @@
-//! Shielded pool — on-chain program (Anchor). The chain never hashes: it stores
-//! a ring of recent Merkle roots, `next_index`, and one marker account per spent
-//! nullifier, and verifies the deposit/withdraw proofs (via the crates
-//! `xark export` generated). Public inputs are 32-byte little-endian, appended
-//! to the 256-byte proof in each circuit's declared order.
+//! Shielded pool — the on-chain half (Anchor).
+//!
+//! The program never hashes. All Poseidon lives in the circuits; the chain
+//! keeps only what consensus needs — a ring of recent Merkle roots, the next
+//! leaf index, and one marker account per spent nullifier — and verifies two
+//! proofs (via the crates `xark export` generated):
+//!
+//!   deposit   "new_root extends the current tree by one leaf"  → store new_root
+//!   withdraw  "I own some leaf, here is its nullifier"          → pay out once
+//!
+//! Verifier calldata is the 256-byte proof followed by the circuit's public
+//! inputs, each a 32-byte little-endian field element, in declaration order.
 //!
 //! Reference implementation — unaudited, educational. See the README.
 use anchor_lang::prelude::*;
@@ -14,9 +21,8 @@ use shielded_pool_withdraw_xark_verifier as withdraw_verifier;
 // Placeholder program id — replace with yours via `anchor keys sync`.
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
-const ROOT_HISTORY_SIZE: usize = 16;
 const TREE_HEIGHT: u32 = 20;
-const FR: usize = 32;
+const ROOT_HISTORY_SIZE: usize = 16;
 const PROOF_LEN: usize = 256;
 
 const POOL_SEED: &[u8] = b"pool";
@@ -24,22 +30,20 @@ const NULLIFIER_SEED: &[u8] = b"nullifier";
 
 // Root of an all-empty height-TREE_HEIGHT tree (zeros[H]), little-endian — the
 // deposit circuit's `old_root` for the first deposit. Fixed on-chain so the pool
-// can't be seeded with a wrong root. Regenerate if TREE_HEIGHT or the hash changes.
+// can't be seeded with a wrong root. Regenerate if TREE_HEIGHT or the hash
+// changes: `cargo run --bin pool-witness -- zeros` (e2e crate).
 const EMPTY_ROOT: [u8; 32] = [
-    135, 227, 121, 77, 213, 238, 58, 244, 153, 9, 194, 249, 82, 209, 238, 237, 67, 230, 207, 242,
-    142, 19, 80, 134, 156, 253, 3, 15, 178, 188, 57, 48,
+    251, 142, 67, 247, 199, 111, 241, 124, 245, 96, 180, 214, 179, 51, 248, 149, 20, 177, 173, 83,
+    193, 126, 124, 38, 168, 0, 139, 11, 55, 225, 46, 3,
 ];
 
 #[program]
 pub mod shielded_pool {
     use super::*;
 
-    /// Create the pool. `empty_root` is the root of an all-empty tree of height
-    /// `TREE_HEIGHT` — i.e. `zeros[H]` from the deposit circuit. Compute it once
-    /// off-chain (the client prints it) and pass it in.
-    // Permissionless: first caller creates the singleton pool and fixes the
-    // denomination (fine for a demo). The empty-tree root is fixed on-chain, so
-    // the pool cannot be seeded with a wrong root.
+    /// Create the pool for one denomination. Permissionless: the first caller
+    /// fixes the size (fine for a demo); the empty-tree root is a program
+    /// constant, so the pool cannot be seeded with a wrong root.
     pub fn initialize(ctx: Context<Initialize>, denomination: u64) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
         pool.denomination = denomination;
@@ -59,26 +63,19 @@ pub mod shielded_pool {
         new_root: [u8; 32],
         proof: Vec<u8>,
     ) -> Result<()> {
+        let pool = &ctx.accounts.pool;
         require!(proof.len() == PROOF_LEN, PoolError::BadProofLen);
-
-        let (denomination, current_root_index, next_index) = {
-            let p = &ctx.accounts.pool;
-            (p.denomination, p.current_root_index, p.next_index)
-        };
-        require!((next_index as u64) < (1u64 << TREE_HEIGHT), PoolError::TreeFull);
-
-        let old_root = ctx.accounts.pool.roots[current_root_index as usize];
-        let index_le = u32_to_field_le(next_index);
-
-        // public inputs order (deposit circuit): old_root, new_root, leaf, index
-        let mut data = Vec::with_capacity(PROOF_LEN + 4 * FR);
-        data.extend_from_slice(&proof);
-        data.extend_from_slice(&old_root);
-        data.extend_from_slice(&new_root);
-        data.extend_from_slice(&commitment);
-        data.extend_from_slice(&index_le);
         require!(
-            deposit_verifier::verify_instruction_data(&data),
+            (pool.next_index as u64) < (1u64 << TREE_HEIGHT),
+            PoolError::TreeFull
+        );
+
+        // Public inputs in the deposit circuit's order.
+        let old_root = pool.current_root();
+        let index = field_from_u64(pool.next_index as u64);
+        let calldata = verifier_calldata(&proof, &[old_root, new_root, commitment, index]);
+        require!(
+            deposit_verifier::verify_instruction_data(&calldata),
             PoolError::InvalidProof
         );
 
@@ -91,17 +88,13 @@ pub mod shielded_pool {
                     to: ctx.accounts.pool.to_account_info(),
                 },
             ),
-            denomination,
+            pool.denomination,
         )?;
 
         // Advance the tree: remember the new root, bump the index.
-        let pool = &mut ctx.accounts.pool;
-        let next = (current_root_index + 1) % (ROOT_HISTORY_SIZE as u32);
-        pool.current_root_index = next;
-        pool.roots[next as usize] = new_root;
-        pool.next_index = next_index + 1;
-
-        emit!(DepositEvent { commitment, index: next_index });
+        let index = ctx.accounts.pool.next_index;
+        ctx.accounts.pool.push_root(new_root);
+        emit!(DepositEvent { commitment, index });
         Ok(())
     }
 
@@ -121,48 +114,46 @@ pub mod shielded_pool {
         nullifier_hash: [u8; 32],
         fee: u64,
     ) -> Result<()> {
+        let pool = &ctx.accounts.pool;
         require!(proof.len() == PROOF_LEN, PoolError::BadProofLen);
+        require!(fee <= pool.denomination, PoolError::FeeTooHigh);
+        require!(pool.knows_root(&root), PoolError::UnknownRoot);
 
-        let denomination = ctx.accounts.pool.denomination;
-        require!(fee <= denomination, PoolError::FeeTooHigh);
-        require!(
-            is_known_root(&ctx.accounts.pool, &root),
-            PoolError::UnknownRoot
-        );
-
+        // Public inputs in the withdraw circuit's order. Pubkeys are wider than
+        // the field, so each enters as two 128-bit halves — split identically
+        // to the circuit.
         let (r_hi, r_lo) = split_pubkey(&ctx.accounts.recipient.key());
         let (l_hi, l_lo) = split_pubkey(&ctx.accounts.relayer.key());
-        let fee_le = u64_to_field_le(fee);
-
-        // public inputs order (withdraw circuit):
-        //   root, nullifier_hash, recipient_hi, recipient_lo, relayer_hi, relayer_lo, fee
-        let mut data = Vec::with_capacity(PROOF_LEN + 7 * FR);
-        data.extend_from_slice(&proof);
-        data.extend_from_slice(&root);
-        data.extend_from_slice(&nullifier_hash);
-        data.extend_from_slice(&r_hi);
-        data.extend_from_slice(&r_lo);
-        data.extend_from_slice(&l_hi);
-        data.extend_from_slice(&l_lo);
-        data.extend_from_slice(&fee_le);
+        let calldata = verifier_calldata(
+            &proof,
+            &[
+                root,
+                nullifier_hash,
+                r_hi,
+                r_lo,
+                l_hi,
+                l_lo,
+                field_from_u64(fee),
+            ],
+        );
         require!(
-            withdraw_verifier::verify_instruction_data(&data),
+            withdraw_verifier::verify_instruction_data(&calldata),
             PoolError::InvalidProof
         );
 
         // Pay out from the pool PDA (program-owned → move lamports directly).
-        let payout = denomination - fee;
+        let denomination = pool.denomination;
         let pool_ai = ctx.accounts.pool.to_account_info();
         let recipient_ai = ctx.accounts.recipient.to_account_info();
         let relayer_ai = ctx.accounts.relayer.to_account_info();
         **pool_ai.try_borrow_mut_lamports()? -= denomination;
-        **recipient_ai.try_borrow_mut_lamports()? += payout;
+        **recipient_ai.try_borrow_mut_lamports()? += denomination - fee;
         **relayer_ai.try_borrow_mut_lamports()? += fee;
         Ok(())
     }
 }
 
-// ---- Accounts ---------------------------------------------------------------
+// ---- accounts ----------------------------------------------------------------
 
 #[derive(Accounts)]
 #[instruction(denomination: u64)]
@@ -212,7 +203,7 @@ pub struct Withdraw<'info> {
     pub system_program: Program<'info, System>,
 }
 
-// ---- State ------------------------------------------------------------------
+// ---- state -------------------------------------------------------------------
 
 #[account]
 #[derive(InitSpace)]
@@ -222,6 +213,25 @@ pub struct Pool {
     pub current_root_index: u32,
     pub roots: [[u8; 32]; ROOT_HISTORY_SIZE],
     pub bump: u8,
+}
+
+impl Pool {
+    fn current_root(&self) -> [u8; 32] {
+        self.roots[self.current_root_index as usize]
+    }
+
+    /// Remember `root` as the newest entry in the ring and advance the tree.
+    fn push_root(&mut self, root: [u8; 32]) {
+        self.current_root_index = (self.current_root_index + 1) % ROOT_HISTORY_SIZE as u32;
+        self.roots[self.current_root_index as usize] = root;
+        self.next_index += 1;
+    }
+
+    /// Is `root` one of the recent ring entries? (All-zero never matches: the
+    /// unused ring slots are zeroed, and a real root is never zero.)
+    fn knows_root(&self, root: &[u8; 32]) -> bool {
+        root.iter().any(|&b| b != 0) && self.roots.iter().any(|r| r == root)
+    }
 }
 
 #[account]
@@ -247,30 +257,27 @@ pub enum PoolError {
     TreeFull,
 }
 
-// ---- Helpers ----------------------------------------------------------------
+// ---- verifier plumbing ---------------------------------------------------------
 
-fn is_known_root(pool: &Pool, root: &[u8; 32]) -> bool {
-    if root.iter().all(|&b| b == 0) {
-        return false;
+/// proof ‖ public inputs — the exact byte string the generated verifier checks.
+fn verifier_calldata(proof: &[u8], public_inputs: &[[u8; 32]]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(proof.len() + 32 * public_inputs.len());
+    data.extend_from_slice(proof);
+    for input in public_inputs {
+        data.extend_from_slice(input);
     }
-    pool.roots.iter().any(|r| r == root)
+    data
 }
 
-fn u32_to_field_le(x: u32) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    out[..4].copy_from_slice(&x.to_le_bytes());
-    out
-}
-
-fn u64_to_field_le(x: u64) -> [u8; 32] {
+/// A u64 as a 32-byte little-endian field element.
+fn field_from_u64(x: u64) -> [u8; 32] {
     let mut out = [0u8; 32];
     out[..8].copy_from_slice(&x.to_le_bytes());
     out
 }
 
-/// Split a 32-byte pubkey into two 128-bit field elements.
-/// `lo` = bytes[0..16], `hi` = bytes[16..32], each little-endian in a 32-byte
-/// field. The client feeds the circuit the identical split.
+/// Split a 32-byte pubkey into two 128-bit field elements:
+/// `lo` = bytes[0..16], `hi` = bytes[16..32]. The circuit range-checks both.
 fn split_pubkey(pk: &Pubkey) -> ([u8; 32], [u8; 32]) {
     let b = pk.to_bytes();
     let mut hi = [0u8; 32];

@@ -3,8 +3,8 @@
 
 use std::path::PathBuf;
 
-use litesvm::LiteSVM;
 use litesvm::types::TransactionResult;
+use litesvm::LiteSVM;
 use sha2::{Digest, Sha256};
 use solana_instruction::Instruction;
 use solana_keypair::Keypair;
@@ -14,7 +14,10 @@ use solana_transaction::Transaction;
 
 /// Repo root (the parent of the `e2e/` crate).
 pub fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf()
 }
 
 /// Read a repo-relative file, panicking with the path if missing.
@@ -42,10 +45,13 @@ pub fn borsh_bytes(v: &[u8]) -> Vec<u8> {
 
 /// Anchor instruction discriminator = sha256("global:<name>")[..8].
 pub fn disc(name: &str) -> [u8; 8] {
-    Sha256::digest(format!("global:{name}").as_bytes())[..8].try_into().unwrap()
+    Sha256::digest(format!("global:{name}").as_bytes())[..8]
+        .try_into()
+        .unwrap()
 }
 
 /// Sign + send a single-instruction transaction.
+#[allow(clippy::result_large_err)]
 pub fn send(svm: &mut LiteSVM, ix: Instruction, signer: &Keypair) -> TransactionResult {
     let msg = Message::new(&[ix], Some(&signer.pubkey()));
     svm.send_transaction(Transaction::new(&[signer], msg, svm.latest_blockhash()))

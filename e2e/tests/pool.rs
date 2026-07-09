@@ -17,24 +17,14 @@ use solana_signer::Signer;
 const PROGRAM_ID: &str = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS";
 const DENOMINATION: u64 = 1_000_000_000; // 1 SOL
 
-// Test keypairs bound into the withdraw proof (see circuits/withdraw/Prover.toml).
-const RELAYER: [u8; 64] = [
-    222, 27, 248, 241, 243, 155, 183, 138, 72, 86, 34, 113, 80, 238, 215, 7, 219, 136, 30, 144,
-    122, 237, 63, 116, 254, 188, 128, 113, 105, 153, 172, 56, 91, 240, 156, 105, 6, 194, 63, 197,
-    56, 125, 221, 53, 2, 248, 135, 176, 89, 78, 14, 41, 204, 168, 171, 198, 70, 69, 81, 57, 44,
-    158, 77, 232,
-];
-const RECIPIENT: [u8; 64] = [
-    212, 15, 49, 134, 72, 242, 239, 139, 44, 143, 167, 93, 16, 39, 229, 29, 13, 215, 136, 22, 134,
-    121, 177, 47, 4, 83, 95, 86, 234, 242, 171, 109, 137, 187, 244, 226, 218, 76, 53, 133, 74, 6,
-    206, 253, 228, 242, 220, 84, 148, 212, 171, 202, 211, 57, 164, 158, 9, 139, 238, 207, 95, 214,
-    211, 43,
-];
+// Test keypairs bound into the withdraw proof — shared with the witness
+// generator (`pool-witness`) via the e2e lib, so prover and chain always agree.
+use xark_examples_e2e::fixtures::{RECIPIENT, RELAYER};
 
 const DEPOSIT_DIR: &str =
-    "03-shielded-pool/circuits/deposit/target/shielded_pool_deposit-xark-verifier";
+    "03-shielded-pool/circuits/deposit/target/xark/shielded_pool_deposit/verifier";
 const WITHDRAW_DIR: &str =
-    "03-shielded-pool/circuits/withdraw/target/shielded_pool_withdraw-xark-verifier";
+    "03-shielded-pool/circuits/withdraw/target/xark/shielded_pool_withdraw/verifier";
 
 /// A pool that's been initialized and has one deposit, ready to withdraw.
 struct Pool {
@@ -66,11 +56,17 @@ fn setup() -> Pool {
     let w_root = chunk32(&wpi, 0);
     let nullifier_hash = chunk32(&wpi, 1);
     let withdraw_proof = read(&format!("{WITHDRAW_DIR}/proof.solana.bin"));
-    assert_eq!(w_root, new_root, "withdraw root must equal the deposit's new root");
+    assert_eq!(
+        w_root, new_root,
+        "withdraw root must equal the deposit's new root"
+    );
 
-    let mut svm = LiteSVM::new();
-    svm.add_program(program_id, &read("03-shielded-pool/program/target/deploy/shielded_pool.so"))
-        .unwrap();
+    let mut svm = LiteSVM::new().with_mainnet_features();
+    svm.add_program(
+        program_id,
+        &read("03-shielded-pool/program/target/deploy/shielded_pool.so"),
+    )
+    .unwrap();
 
     let authority = Keypair::new();
     let depositor = Keypair::new();
@@ -121,7 +117,17 @@ fn setup() -> Pool {
     )
     .expect("deposit");
 
-    Pool { svm, program_id, system, pool, relayer, recipient, withdraw_proof, w_root, nullifier_hash }
+    Pool {
+        svm,
+        program_id,
+        system,
+        pool,
+        relayer,
+        recipient,
+        withdraw_proof,
+        w_root,
+        nullifier_hash,
+    }
 }
 
 /// Build a withdraw instruction, allowing each field to be overridden for the
@@ -161,25 +167,56 @@ fn shielded_pool_full_flow() {
     let mut p = setup();
     let before = p.svm.get_balance(&p.recipient.pubkey()).unwrap_or(0);
 
-    let ix = withdraw_ix(&p, &p.withdraw_proof, p.w_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    let ix = withdraw_ix(
+        &p,
+        &p.withdraw_proof,
+        p.w_root,
+        p.nullifier_hash,
+        0,
+        p.recipient.pubkey(),
+    );
     let relayer = p.relayer.insecure_clone();
     send(&mut p.svm, ix, &relayer).expect("withdraw");
 
     let after = p.svm.get_balance(&p.recipient.pubkey()).unwrap_or(0);
-    assert_eq!(after - before, DENOMINATION, "recipient receives the full denomination");
+    assert_eq!(
+        after - before,
+        DENOMINATION,
+        "recipient receives the full denomination"
+    );
 
     // Double-spend: same nullifier must fail.
-    let ix = withdraw_ix(&p, &p.withdraw_proof, p.w_root, p.nullifier_hash, 0, p.recipient.pubkey());
-    assert!(send(&mut p.svm, ix, &relayer).is_err(), "double-spend must be rejected");
+    let ix = withdraw_ix(
+        &p,
+        &p.withdraw_proof,
+        p.w_root,
+        p.nullifier_hash,
+        0,
+        p.recipient.pubkey(),
+    );
+    assert!(
+        send(&mut p.svm, ix, &relayer).is_err(),
+        "double-spend must be rejected"
+    );
 }
 
 #[test]
 fn withdraw_rejects_unknown_root() {
     let mut p = setup();
     let bad_root = [9u8; 32];
-    let ix = withdraw_ix(&p, &p.withdraw_proof, bad_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    let ix = withdraw_ix(
+        &p,
+        &p.withdraw_proof,
+        bad_root,
+        p.nullifier_hash,
+        0,
+        p.recipient.pubkey(),
+    );
     let relayer = p.relayer.insecure_clone();
-    assert!(send(&mut p.svm, ix, &relayer).is_err(), "unknown root must be rejected");
+    assert!(
+        send(&mut p.svm, ix, &relayer).is_err(),
+        "unknown root must be rejected"
+    );
 }
 
 #[test]
@@ -194,16 +231,29 @@ fn withdraw_rejects_fee_above_denomination() {
         p.recipient.pubkey(),
     );
     let relayer = p.relayer.insecure_clone();
-    assert!(send(&mut p.svm, ix, &relayer).is_err(), "fee > denomination must be rejected");
+    assert!(
+        send(&mut p.svm, ix, &relayer).is_err(),
+        "fee > denomination must be rejected"
+    );
 }
 
 #[test]
 fn withdraw_rejects_bad_proof_len() {
     let mut p = setup();
     let short = p.withdraw_proof[..255].to_vec();
-    let ix = withdraw_ix(&p, &short, p.w_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    let ix = withdraw_ix(
+        &p,
+        &short,
+        p.w_root,
+        p.nullifier_hash,
+        0,
+        p.recipient.pubkey(),
+    );
     let relayer = p.relayer.insecure_clone();
-    assert!(send(&mut p.svm, ix, &relayer).is_err(), "wrong proof length must be rejected");
+    assert!(
+        send(&mut p.svm, ix, &relayer).is_err(),
+        "wrong proof length must be rejected"
+    );
 }
 
 #[test]
@@ -211,30 +261,47 @@ fn withdraw_rejects_tampered_proof() {
     let mut p = setup();
     let mut proof = p.withdraw_proof.clone();
     proof[0] ^= 0xff;
-    let ix = withdraw_ix(&p, &proof, p.w_root, p.nullifier_hash, 0, p.recipient.pubkey());
+    let ix = withdraw_ix(
+        &p,
+        &proof,
+        p.w_root,
+        p.nullifier_hash,
+        0,
+        p.recipient.pubkey(),
+    );
     let relayer = p.relayer.insecure_clone();
-    assert!(send(&mut p.svm, ix, &relayer).is_err(), "tampered proof must be rejected");
+    assert!(
+        send(&mut p.svm, ix, &relayer).is_err(),
+        "tampered proof must be rejected"
+    );
 }
 
 #[test]
 fn withdraw_rejects_wrong_recipient() {
     let mut p = setup();
-    // A recipient not bound into the proof → derived public inputs won't match.
+    // A different recipient changes the proof-bound public inputs.
     let wrong = Keypair::new().pubkey();
     let ix = withdraw_ix(&p, &p.withdraw_proof, p.w_root, p.nullifier_hash, 0, wrong);
     let relayer = p.relayer.insecure_clone();
-    assert!(send(&mut p.svm, ix, &relayer).is_err(), "wrong recipient must be rejected");
+    assert!(
+        send(&mut p.svm, ix, &relayer).is_err(),
+        "wrong recipient must be rejected"
+    );
 }
 
 #[test]
 fn two_denominations_coexist() {
     let program_id = Address::from_str(PROGRAM_ID).unwrap();
     let system = Address::from_str("11111111111111111111111111111111").unwrap();
-    let mut svm = LiteSVM::new();
-    svm.add_program(program_id, &read("03-shielded-pool/program/target/deploy/shielded_pool.so"))
-        .unwrap();
+    let mut svm = LiteSVM::new().with_mainnet_features();
+    svm.add_program(
+        program_id,
+        &read("03-shielded-pool/program/target/deploy/shielded_pool.so"),
+    )
+    .unwrap();
     let authority = Keypair::new();
-    svm.airdrop(&authority.pubkey(), 100 * DENOMINATION).unwrap();
+    svm.airdrop(&authority.pubkey(), 100 * DENOMINATION)
+        .unwrap();
 
     let init = |svm: &mut LiteSVM, denom: u64| -> (Address, bool) {
         let (pool, _) =

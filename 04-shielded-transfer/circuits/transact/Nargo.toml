@@ -1,6 +1,0 @@
-[package]
-name = "shielded_transact"
-type = "bin"
-authors = ["Blueshift"]
-
-[dependencies]

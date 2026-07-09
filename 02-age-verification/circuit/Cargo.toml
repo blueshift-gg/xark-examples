@@ -1,0 +1,22 @@
+# The age-verification circuit — plain Rust that xark compiles to R1CS.
+[package]
+name = "age_verification"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+xark = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03", default-features = false }
+# Poseidon2 as an ordinary Rust library the compiler inlines into the circuit.
+xark-poseidon2 = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }
+
+[dev-dependencies]
+# String-valued proving API for in-crate tests (a commitment is a full field
+# element, wider than the i128 the #[circuit] test struct can carry).
+xark-prover = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }
+xark-ir = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }

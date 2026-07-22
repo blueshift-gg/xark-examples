@@ -1,6 +1,6 @@
 //! End-to-end verification of the example programs inside an in-process Solana
 //! VM (LiteSVM). Each test loads the compiled `.so`, submits the real
-//! `instruction_data.bin` that `xark export` produced, and asserts:
+//! `instruction_data.bin` that `xark prove` produced, and asserts:
 //!   1. the valid proof verifies on-chain (through the native alt_bn128 syscalls), and
 //!   2. a tampered proof is rejected.
 //!
@@ -54,7 +54,7 @@ fn assert_verifies(so_rel: &str, ix_rel: &str) {
 fn over_9000_verifies_on_chain() {
     assert_verifies(
         "01-over-9000/program/target/deploy/over_9000_program.so",
-        "01-over-9000/circuit/target/xark/over_9000/verifier/instruction_data.bin",
+        "01-over-9000/circuit/target/xark/over_9000/instruction_data.bin",
     );
 }
 
@@ -62,6 +62,6 @@ fn over_9000_verifies_on_chain() {
 fn age_verification_verifies_on_chain() {
     assert_verifies(
         "02-age-verification/program/target/deploy/age_verification_program.so",
-        "02-age-verification/circuit/target/xark/age_verification/verifier/instruction_data.bin",
+        "02-age-verification/circuit/target/xark/age_verification/instruction_data.bin",
     );
 }

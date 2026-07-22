@@ -19,12 +19,12 @@ gen-chain:
     mkdir -p circuits/transact/chain
     tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; \
     for tx in dep xfer wd; do \
-        (cd ../e2e && cargo run -q --bin transfer-witness -- $tx) > "$tmp"; \
-        xark prove circuits/transact --input-file "$tmp"; \
-        xark export circuits/transact --allow-insecure --crate-name shielded-transfer-transact-xark-verifier --verifier-dep '{ git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }'; \
-        cp {{vd}}/verifier/proof.solana.bin circuits/transact/chain/${tx}_proof.bin; \
-        cp {{vd}}/verifier/public_inputs.solana.bin circuits/transact/chain/${tx}_pi.bin; \
-    done
+        (cd ../e2e && cargo run -q --locked --bin transfer-witness -- $tx) > "$tmp"; \
+        xark prove circuits/transact --inputs "$tmp"; \
+        cp {{vd}}/proof.solana.bin circuits/transact/chain/${tx}_proof.bin; \
+        cp {{vd}}/public_inputs.solana.bin circuits/transact/chain/${tx}_pi.bin; \
+    done; \
+    xark export circuits/transact --allow-insecure --crate-name shielded-transfer-transact-xark-verifier
 
 # Build the Anchor program (needs `gen-chain` first — it generates the verifier crate).
 build-program:
@@ -32,7 +32,7 @@ build-program:
 
 # Everything, then the in-VM e2e (deposit -> private transfer -> withdraw).
 all: setup gen-chain build-program
-    cd ../e2e && cargo test --test transfer
+    cd ../e2e && cargo test --locked --test transfer
 
 clean:
     rm -rf circuits/transact/target circuits/transact/chain program/target program/.anchor

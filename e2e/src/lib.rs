@@ -22,7 +22,7 @@ pub fn fr_from_le(b: &[u8; 32]) -> Fr {
     Fr::from_le_bytes_mod_order(b)
 }
 
-/// Decimal string form used by `xark prove --input-file`.
+/// Decimal string form used by `xark prove --inputs`.
 pub fn fr_to_decimal(x: Fr) -> String {
     x.into_bigint().to_string()
 }

@@ -7,21 +7,21 @@ an example's `justfile`, the `justfile` is authoritative.
 
 | Tool | Version | Install |
 |------|---------|---------|
-| xark nightly | `nightly-2026-05-03` | `rustup toolchain install nightly-2026-05-03 --profile minimal --component rust-src --component rustc-dev --component llvm-tools` |
-| xark CLI and crates | commit `44f9a8d3b1f5af90a57249fa1dad308968922a03` | command below |
+| xark compiler toolchain | `nightly-2026-05-03` | `rustup toolchain install nightly-2026-05-03 --profile minimal --component rust-src --component rustc-dev --component llvm-tools` |
+| xark CLI and crates | local sibling checkout (`0.2.2-dev`) | commands below |
 | Rust | `1.95.0` | installed from `rust-toolchain.toml` |
 | `cargo-build-sbf` | `4.0.0` | `cargo install cargo-build-sbf --version 4.0.0 --locked` |
 | Anchor, for deploy only | `1.1.2` | `avm install 1.1.2 && avm use 1.1.2` |
 | `just` | `1.43.1` | `cargo install just --version 1.43.1 --locked` |
 | `snarkjs`, optional | current | `npm install --global snarkjs` |
 
-Install the same xark revision used by every circuit and generated verifier:
+Until `0.2.2` is released, keep `xark` and `xark-examples` as sibling checkouts. The circuit
+manifests intentionally use relative paths into that local source. Install both binaries from the
+same checkout; `xark-cli` owns the user-facing command and `xark-rustc` is its compiler driver:
 
 ```bash
-cargo +nightly-2026-05-03 install \
-  --git https://github.com/blueshift-gg/xark \
-  --rev 44f9a8d3b1f5af90a57249fa1dad308968922a03 \
-  xark --locked --features cli
+cargo install --path ../xark/crates/cli --locked
+cargo +nightly-2026-05-03 install --path ../xark/crates/rustc --locked
 ```
 
 Run `xark doctor` after installation. The repository commits every Cargo lockfile needed by its
@@ -39,19 +39,19 @@ solana airdrop 2
 
 ## 2. How the repository depends on xark
 
-There are three version-aligned surfaces:
+There are three source-aligned surfaces:
 
-1. Each circuit pins `xark` and gadget crates to the commit above.
-2. The installed CLI is built from that same commit.
-3. Every `xark export` command writes an exact-revision `xark-verifier` dependency into the generated
-   verifier crate. Program workspaces patch that dependency to the checked-in
-   `vendor/xark-verifier` snapshot of the same commit, whose only manifest change disables the
-   dependency's incompatible static-syscalls default.
+1. Each circuit depends only on `xark` and its actual gadget crates through the sibling checkout.
+   Host validation is internal to `xark`; examples do not depend on `xark-prover` or register
+   Xark's private cfg.
+2. The installed CLI and compiler driver come from that same checkout.
+3. A dirty local `xark export` writes a path dependency to that checkout's `xark-verifier`; a clean
+   release build writes an immutable release or exact-revision dependency. Programs use the normal
+   `cargo build-sbf` target selected by their toolchain.
 
-No sibling xark checkout or generated-manifest rewrite is required. `vendor/xark-verifier/UPSTREAM.md`
-records the compatibility patch. Updating xark is a deliberate repository-wide operation: update
-the revision in circuit manifests, justfiles, CI, the vendor snapshot, and this runbook together;
-regenerate lockfiles; then run the full suite.
+This local wiring is temporary dogfooding, not the published form. When `0.2.2` ships, replace the
+path dependencies and CI checkout with exact release pins in one repository-wide change, regenerate
+lockfiles, and run the full suite.
 
 ## 3. The circuit pipeline
 
@@ -61,12 +61,19 @@ The underlying commands are:
 xark build <circuit-dir>
 xark inspect <circuit-dir>
 xark setup <circuit-dir>
-xark prove <circuit-dir> --input-file <private-input-file>
-xark export <circuit-dir> --allow-insecure --crate-name <name> \
-  --verifier-dep '{ git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }'
+xark test <circuit-dir>
+xark prove <circuit-dir> --inputs <private-input-file>
+xark export <circuit-dir> --allow-insecure --crate-name <name>
 ```
 
-`xark prove` self-verifies the proof, so a second `xark verify` is optional. The justfiles create
+`xark build` writes the compact `circuit.xbc` under `target/xark/<package>/`; pass `--emit-json`
+only when expanded IR is actually needed. `xark inspect` is the canonical check for flattened input
+names and public-input order. Structured inputs derived with `CircuitInput` use dotted names such
+as `identity.birth_year` in `--inputs` documents.
+
+`xark prove` self-verifies the proof and writes `proof.solana.bin`,
+`public_inputs.solana.bin`, and `instruction_data.bin`; `xark export` generates the verifier crate,
+not the proof wire format. A second `xark verify` is optional. The justfiles create
 mode-`0600` temporary input files with `mktemp` rather than exposing private witness values in process
 arguments. Setup without a `.ptau` produces a dev key; `--allow-insecure` is intentionally required
 to export it.
@@ -90,9 +97,11 @@ just test
 just clippy
 ```
 
-`just test` builds all circuits, dev keys, proofs, generated verifier crates, and Solana programs,
-then runs the LiteSVM suite through mainnet-feature `alt_bn128` syscalls. It needs no validator or
-network after dependencies and SBF platform tools are installed.
+`just test-circuits` runs the focused native pass/fail cases in examples 01 and 02. The larger 03
+and 04 relations need complete protocol witnesses, so `just test` is their semantic test: it builds
+all circuits, dev keys, proofs, generated verifier crates, and Solana programs, then runs the
+LiteSVM suite through mainnet-feature `alt_bn128` syscalls. It needs no validator or network after
+dependencies and SBF platform tools are installed.
 
 ## 5. Deploying a program
 

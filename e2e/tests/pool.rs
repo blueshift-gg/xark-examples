@@ -1,6 +1,6 @@
 //! Full shielded-pool flow in an in-process Solana VM (LiteSVM):
 //! initialize -> deposit -> withdraw, plus the program's rejection paths.
-//! All field bytes come from the exported `*.solana.bin` artifacts so the
+//! All field bytes come from the `*.solana.bin` artifacts written by `xark prove`, so the
 //! on-chain public inputs match the proofs exactly. Requires the pool built per
 //! ../RUNBOOK.md.
 mod common;
@@ -21,10 +21,8 @@ const DENOMINATION: u64 = 1_000_000_000; // 1 SOL
 // generator (`pool-witness`) via the e2e lib, so prover and chain always agree.
 use xark_examples_e2e::fixtures::{RECIPIENT, RELAYER};
 
-const DEPOSIT_DIR: &str =
-    "03-shielded-pool/circuits/deposit/target/xark/shielded_pool_deposit/verifier";
-const WITHDRAW_DIR: &str =
-    "03-shielded-pool/circuits/withdraw/target/xark/shielded_pool_withdraw/verifier";
+const DEPOSIT_DIR: &str = "03-shielded-pool/circuits/deposit/target/xark/shielded_pool_deposit";
+const WITHDRAW_DIR: &str = "03-shielded-pool/circuits/withdraw/target/xark/shielded_pool_withdraw";
 
 /// A pool that's been initialized and has one deposit, ready to withdraw.
 struct Pool {

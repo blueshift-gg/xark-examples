@@ -2,7 +2,8 @@
 [package]
 name = "over_9000"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+license = "MIT"
 publish = false
 
 [workspace]
@@ -11,8 +12,4 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-xark = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03", default-features = false }
-
-[dev-dependencies]
-# For the in-crate prove-tests (`xark test`).
-xark-prover = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }
+xark = { path = "../../../xark/crates/lang" }

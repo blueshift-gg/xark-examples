@@ -32,9 +32,7 @@
 //!   old_root, new_root, insert_index, vpub_in, vpub_out, fee,
 //!   recipient_hi, recipient_lo,
 //!   memo0_hash_hi, memo0_hash_lo, memo1_hash_hi, memo1_hash_lo
-#![no_std]
-
-use pool_merkle::{merkle_root, mux, zeros, H};
+use pool_merkle::{H, merkle_root, mux, zeros};
 use xark::prelude::*;
 use xark_poseidon2::{hash, hash2};
 
@@ -79,70 +77,88 @@ fn root_from_level1(node: Field, bits: [Field; H], filled: [Field; H], z: [Field
     current
 }
 
-// Keep explicit assignments in the circuit subset instead of relying on
-// AddAssign lowering support.
-#[allow(clippy::assign_op_pattern, clippy::too_many_arguments)]
-pub fn circuit(
-    sk: Private<Field>,
-    in_value: Private<[Field; NINS]>,
-    in_d: Private<[Field; NINS]>,
-    in_rho: Private<[Field; NINS]>,
-    in_rseed: Private<[Field; NINS]>,
-    in_path: Private<[[Field; H]; NINS]>,
-    in_bits: Private<[[Field; H]; NINS]>, // auth-path direction bits, LSB-first
-    in_enforce: Private<[Field; NINS]>,   // 1 = real spend, 0 = dummy
-    out_value: Private<[Field; NOUTS]>,
-    out_addr: Private<[Field; NOUTS]>,
-    out_rho: Private<[Field; NOUTS]>,
-    out_rseed: Private<[Field; NOUTS]>,
-    filled_subtrees: Private<[Field; H]>, // frontier at insert_index ([0] unused: pair-aligned)
-    root: Public<Field>,
-    asset: Public<Field>,
-    nf: Public<[Field; NINS]>,
-    cm_out: Public<[Field; NOUTS]>,
-    old_root: Public<Field>,
-    new_root: Public<Field>,
-    insert_index: Public<Field>,
-    vpub_in: Public<Field>,
-    vpub_out: Public<Field>,
-    fee: Public<Field>,
-    recipient_hi: Public<Field>,
-    recipient_lo: Public<Field>,
-    memo0_hash_hi: Public<Field>,
-    memo0_hash_lo: Public<Field>,
-    memo1_hash_hi: Public<Field>,
-    memo1_hash_lo: Public<Field>,
-) {
-    let nk = derive_nk(sk);
-    let ivk = derive_ivk(sk);
+/// Everything known only to the prover. `CircuitInput` derives the exact
+/// host-to-circuit leaf mapping for this nested witness in declaration order.
+#[derive(Clone, Copy, Debug, CircuitInput)]
+pub struct TransactWitness {
+    pub sk: Field,
+    pub in_value: [Field; NINS],
+    pub in_d: [Field; NINS],
+    pub in_rho: [Field; NINS],
+    pub in_rseed: [Field; NINS],
+    pub in_path: [[Field; H]; NINS],
+    pub in_bits: [[Field; H]; NINS],
+    pub in_enforce: [Field; NINS],
+    pub out_value: [Field; NOUTS],
+    pub out_addr: [Field; NOUTS],
+    pub out_rho: [Field; NOUTS],
+    pub out_rseed: [Field; NOUTS],
+    pub filled_subtrees: [Field; H],
+}
+
+/// The verifier-visible statement. Field order is the on-chain public-input
+/// ABI; keep it in lockstep with the program and E2E instruction builder.
+#[derive(Clone, Copy, Debug, CircuitInput)]
+pub struct TransactStatement {
+    pub root: Field,
+    pub asset: Field,
+    pub nf: [Field; NINS],
+    pub cm_out: [Field; NOUTS],
+    pub old_root: Field,
+    pub new_root: Field,
+    pub insert_index: Field,
+    pub vpub_in: Field,
+    pub vpub_out: Field,
+    pub fee: Field,
+    pub recipient_hi: Field,
+    pub recipient_lo: Field,
+    pub memo0_hash_hi: Field,
+    pub memo0_hash_lo: Field,
+    pub memo1_hash_hi: Field,
+    pub memo1_hash_lo: Field,
+}
+
+#[circuit]
+pub fn shielded_transact(witness: Private<TransactWitness>, statement: Public<TransactStatement>) {
+    let nk = derive_nk(witness.sk);
+    let ivk = derive_ivk(witness.sk);
 
     // ---- spend side ----
     let mut sum_in = Field::from(0u64);
     let mut i = 0usize;
     while i < NINS {
-        let e = in_enforce[i];
-        assert_eq(e * e, e); // e ∈ {0, 1}
-        let _ = in_value[i].to_bits::<64>(); // value < 2^64
-        assert_eq(in_value[i] * (Field::from(1u64) - e), Field::from(0u64)); // dummies carry 0
+        let e = witness.in_enforce[i];
+        require_eq(e * e, e); // e is boolean
+        let _ = witness.in_value[i].to_bits::<64>(); // value < 2^64
+        require_eq(
+            witness.in_value[i] * (Field::from(1u64) - e),
+            Field::from(0u64),
+        ); // dummies carry 0
 
-        let addr = derive_addr(ivk, in_d[i]);
-        let cm = note_commit(in_value[i], asset, addr, in_rho[i], in_rseed[i]);
+        let addr = derive_addr(ivk, witness.in_d[i]);
+        let cm = note_commit(
+            witness.in_value[i],
+            statement.asset,
+            addr,
+            witness.in_rho[i],
+            witness.in_rseed[i],
+        );
 
         // Position from the path bits (booleanity asserted in merkle_root).
         let mut pos = Field::from(0u64);
         let mut pow = Field::from(1u64);
         let mut k = 0usize;
         while k < H {
-            pos = pos + in_bits[i][k] * pow;
+            pos = pos + witness.in_bits[i][k] * pow;
             pow = pow + pow;
             k += 1;
         }
 
         // Membership only for real inputs; nullifiers burn either way.
-        let computed = merkle_root(cm, in_path[i], in_bits[i]);
-        assert_eq((computed - root) * e, Field::from(0u64));
-        assert_eq(nullifier(nk, cm, pos), nf[i]);
-        sum_in = sum_in + in_value[i];
+        let computed = merkle_root(cm, witness.in_path[i], witness.in_bits[i]);
+        require_eq((computed - statement.root) * e, Field::from(0u64));
+        require_eq(nullifier(nk, cm, pos), statement.nf[i]);
+        sum_in = sum_in + witness.in_value[i];
         i += 1;
     }
 
@@ -150,36 +166,51 @@ pub fn circuit(
     let mut sum_out = Field::from(0u64);
     let mut j = 0usize;
     while j < NOUTS {
-        let _ = out_value[j].to_bits::<64>();
-        let cm = note_commit(out_value[j], asset, out_addr[j], out_rho[j], out_rseed[j]);
-        assert_eq(cm, cm_out[j]);
-        sum_out = sum_out + out_value[j];
+        let _ = witness.out_value[j].to_bits::<64>();
+        let cm = note_commit(
+            witness.out_value[j],
+            statement.asset,
+            witness.out_addr[j],
+            witness.out_rho[j],
+            witness.out_rseed[j],
+        );
+        require_eq(cm, statement.cm_out[j]);
+        sum_out = sum_out + witness.out_value[j];
         j += 1;
     }
 
     // ---- append the pair: old_root → new_root ----
     // `to_bits` range-checks insert_index < 2^H; bit 0 must be 0 (pair-aligned).
-    let bits = insert_index.to_bits::<H>();
-    assert_eq(bits[0], Field::from(0u64));
+    let bits = statement.insert_index.to_bits::<H>();
+    require_eq(bits[0], Field::from(0u64));
     let z = zeros();
     // Bind the private frontier to the current tip (the pair's slot is empty)…
-    assert_eq(root_from_level1(z[1], bits, filled_subtrees, z), old_root);
+    require_eq(
+        root_from_level1(z[1], bits, witness.filled_subtrees, z),
+        statement.old_root,
+    );
     // …then the same tree with the pair present is the new root.
-    let pair = hash2(cm_out[0], cm_out[1]);
-    assert_eq(root_from_level1(pair, bits, filled_subtrees, z), new_root);
+    let pair = hash2(statement.cm_out[0], statement.cm_out[1]);
+    require_eq(
+        root_from_level1(pair, bits, witness.filled_subtrees, z),
+        statement.new_root,
+    );
 
     // ---- value conservation ----
-    let _ = vpub_in.to_bits::<64>();
-    let _ = vpub_out.to_bits::<64>();
-    let _ = fee.to_bits::<64>();
-    assert_eq(sum_in + vpub_in, sum_out + vpub_out + fee);
+    let _ = statement.vpub_in.to_bits::<64>();
+    let _ = statement.vpub_out.to_bits::<64>();
+    let _ = statement.fee.to_bits::<64>();
+    require_eq(
+        sum_in + statement.vpub_in,
+        sum_out + statement.vpub_out + statement.fee,
+    );
 
     // Bind the withdrawal destination and encrypted note-delivery envelopes.
     // Each 32-byte value is represented as two canonical 128-bit limbs.
-    let _ = recipient_hi.to_bits::<128>();
-    let _ = recipient_lo.to_bits::<128>();
-    let _ = memo0_hash_hi.to_bits::<128>();
-    let _ = memo0_hash_lo.to_bits::<128>();
-    let _ = memo1_hash_hi.to_bits::<128>();
-    let _ = memo1_hash_lo.to_bits::<128>();
+    let _ = statement.recipient_hi.to_bits::<128>();
+    let _ = statement.recipient_lo.to_bits::<128>();
+    let _ = statement.memo0_hash_hi.to_bits::<128>();
+    let _ = statement.memo0_hash_lo.to_bits::<128>();
+    let _ = statement.memo1_hash_hi.to_bits::<128>();
+    let _ = statement.memo1_hash_lo.to_bits::<128>();
 }

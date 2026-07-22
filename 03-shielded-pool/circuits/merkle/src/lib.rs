@@ -105,7 +105,7 @@ pub fn merkle_root(leaf: Field, path: [Field; H], index_bits: [Field; H]) -> Fie
     let mut i = 0usize;
     while i < H {
         let b = index_bits[i];
-        xark::lang::assert_eq(b * b, b); // b ∈ {0, 1}
+        xark::require_eq(b * b, b); // b is boolean
         let l = mux(b, path[i], current);
         let r = mux(b, current, path[i]);
         current = hash2(l, r);

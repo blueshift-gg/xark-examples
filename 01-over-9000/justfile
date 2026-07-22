@@ -11,15 +11,15 @@ prove:
     # No .ptau → setup falls back to a DEV-MODE key and says so. NEVER ship it;
     # use `xark ceremony` (or `xark setup --ptau-file`) for anything real.
     xark setup circuit
-    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; printf 'power_level = 9001\n' > "$tmp"; xark prove circuit --input-file "$tmp"
+    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; printf 'power_level = 9001\n' > "$tmp"; xark prove circuit --inputs "$tmp"
 
-# Run the in-crate circuit tests (xark build + cargo test via xark-prover).
+# Run the in-crate circuit tests (xark build + generated native validator).
 test-circuit:
     xark test circuit
 
 # Generate the self-contained on-chain verifier crate (VK embedded).
 export: prove
-    xark export circuit --allow-insecure --crate-name over-9000-xark-verifier --verifier-dep '{ git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }'
+    xark export circuit --allow-insecure --crate-name over-9000-xark-verifier
     @echo "→ verifier crate + instruction_data.bin at circuit/target/xark/over_9000/verifier/"
 
 # Build the Solana program (needs cargo-build-sbf from the Anza CLI).

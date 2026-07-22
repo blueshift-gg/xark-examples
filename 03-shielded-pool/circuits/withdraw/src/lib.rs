@@ -12,46 +12,55 @@
 //! Public inputs, in order: root, nullifier_hash, recipient_hi, recipient_lo,
 //! relayer_hi, relayer_lo, fee. Private: secret, nullifier, path_elements,
 //! path_index_bits. (See the README.)
-#![no_std]
-
-use pool_merkle::{merkle_root, H};
+use pool_merkle::{H, merkle_root};
 use xark::prelude::*;
 use xark_poseidon2::hash;
 
-#[allow(clippy::too_many_arguments)]
-pub fn circuit(
-    secret: Private<Field>,
-    nullifier: Private<Field>,
-    path_elements: Private<[Field; H]>,
-    path_index_bits: Private<[Field; H]>, // 0 = current node is a left child, 1 = right
-    root: Public<Field>,
-    nullifier_hash: Public<Field>,
-    recipient_hi: Public<Field>,
-    recipient_lo: Public<Field>,
-    relayer_hi: Public<Field>,
-    relayer_lo: Public<Field>,
-    fee: Public<Field>,
+#[derive(Clone, Copy, Debug, CircuitInput)]
+pub struct WithdrawWitness {
+    pub secret: Field,
+    pub nullifier: Field,
+    pub path_elements: [Field; H],
+    /// 0 = current node is a left child, 1 = right.
+    pub path_index_bits: [Field; H],
+}
+
+#[derive(Clone, Copy, Debug, CircuitInput)]
+pub struct WithdrawStatement {
+    pub root: Field,
+    pub nullifier_hash: Field,
+    pub recipient_hi: Field,
+    pub recipient_lo: Field,
+    pub relayer_hi: Field,
+    pub relayer_lo: Field,
+    pub fee: Field,
+}
+
+#[circuit]
+pub fn shielded_pool_withdraw(
+    witness: Private<WithdrawWitness>,
+    statement: Public<WithdrawStatement>,
 ) {
     // 1. Recompute the commitment from its secret parts.
-    let commitment = hash::<2>([nullifier, secret]);
+    let commitment = hash::<2>([witness.nullifier, witness.secret]);
 
     // 2. Prove the commitment is a leaf in the tree rooted at `root`
     //    (booleanity of the index bits is asserted inside merkle_root).
-    assert_eq(
-        merkle_root(commitment, path_elements, path_index_bits),
-        root,
+    require_eq(
+        merkle_root(commitment, witness.path_elements, witness.path_index_bits),
+        statement.root,
     );
 
     // 3. Reveal the nullifier hash (the pool marks it spent to prevent re-use).
-    assert_eq(hash::<1>([nullifier]), nullifier_hash);
+    require_eq(hash::<1>([witness.nullifier]), statement.nullifier_hash);
 
     // 4. Binding to a specific recipient/relayer comes from Groth16 over the
     //    hi/lo halves the program derives from real pubkeys. Range-check each
     //    half to 128 bits and the fee to 64 (`to_bits` enforces the bound),
     //    matching the program's split exactly.
-    let _ = recipient_hi.to_bits::<128>();
-    let _ = recipient_lo.to_bits::<128>();
-    let _ = relayer_hi.to_bits::<128>();
-    let _ = relayer_lo.to_bits::<128>();
-    let _ = fee.to_bits::<64>();
+    let _ = statement.recipient_hi.to_bits::<128>();
+    let _ = statement.recipient_lo.to_bits::<128>();
+    let _ = statement.relayer_hi.to_bits::<128>();
+    let _ = statement.relayer_lo.to_bits::<128>();
+    let _ = statement.fee.to_bits::<64>();
 }

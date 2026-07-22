@@ -22,11 +22,11 @@ Jump straight to the [gallery](../README.md) and run [01-over-9000](../01-over-9
 Every example follows the same loop:
 
 ```
-  Rust circuit          ordinary Rust using Private<Field>, Public<Field>, and assertions
+  Rust circuit          ordinary Rust using typed Private/Public inputs and require* constraints
      | xark build       rustc -> MIR -> xark-IR -> R1CS
      v
-  circuit + R1CS       the constraint system and witness-generation program
-     | xark setup / prove --input-file ...
+  circuit + R1CS       compact circuit.xbc (`--emit-json` only for expanded IR)
+     | xark setup / prove --inputs ...
      v
   proof + verifier     a 256-byte Groth16 proof; xark export emits a Rust verifier crate
      |

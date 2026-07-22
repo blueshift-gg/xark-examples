@@ -6,14 +6,27 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  XARK_REV: 44f9a8d3b1f5af90a57249fa1dad308968922a03
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: xark-examples
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out examples
+        uses: actions/checkout@v4
+        with:
+          path: xark-examples
+
+      # Until 0.2.2 is released, examples deliberately dogfood the sibling
+      # checkout through relative path dependencies.
+      - name: Check out local Xark source
+        uses: actions/checkout@v4
+        with:
+          repository: blueshift-gg/xark
+          path: xark
 
       - name: Install Rust tooling
         run: |
@@ -21,11 +34,16 @@ jobs:
           rustup toolchain install nightly-2026-05-03 --profile minimal --component rust-src --component rustc-dev --component llvm-tools
           cargo install just --version 1.43.1 --locked
 
-      - name: Install pinned xark
-        run: cargo +nightly-2026-05-03 install --git https://github.com/blueshift-gg/xark --rev "$XARK_REV" xark --locked --features cli
+      - name: Install local Xark
+        run: |
+          cargo install --path ../xark/crates/cli --locked
+          cargo +nightly-2026-05-03 install --path ../xark/crates/rustc --locked
+          xark --version | grep -E '^xark 0\.2\.2 \([0-9a-f]{12}\)$'
 
       - name: Install pinned Solana program builder
-        run: cargo install cargo-build-sbf --version 4.0.0 --locked
+        run: |
+          cargo install cargo-build-sbf --version 4.0.0 --locked
+          xark doctor
 
       - name: Formatting
         run: just fmt-check

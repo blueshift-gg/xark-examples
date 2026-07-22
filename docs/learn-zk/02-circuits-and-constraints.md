@@ -15,13 +15,15 @@ With xark, the circuit is ordinary Rust:
 use xark::prelude::*;
 
 #[circuit]
-pub fn circuit(power_level: Private<Field>) {
-    assert(power_level > 9000u64);
+pub fn over_9000(power_level: Private<u64>) {
+    require(power_level > 9000u64);
 }
 ```
 
-`Private<Field>` marks a secret witness input. `Public<Field>` marks a value the verifier receives.
-The assertion becomes constraints; it is not a check the prover can bypass at runtime.
+`Private<u64>` marks a secret, range-constrained witness input. `Public<Field>` marks a field value
+the verifier receives. The requirement becomes constraints; it is not a check the prover can bypass
+at runtime. Larger inputs can derive `CircuitInput` and remain normal typed Rust structures; xark
+flattens their leaves into named inputs deterministically.
 
 ## Everything becomes finite-field arithmetic
 
@@ -46,7 +48,7 @@ Rust circuit
    | rustc type-checks it; xark extracts MIR
    v
 xark-IR          a small, auditable circuit intermediate representation
-   | xark lowers field operations and assertions
+   | xark lowers field operations and requirements
    v
 R1CS             Rank-1 Constraint System, the form Groth16 proves
    | xark setup + prove

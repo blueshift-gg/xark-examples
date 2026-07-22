@@ -2,7 +2,8 @@
 [package]
 name = "age_verification"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+license = "MIT"
 publish = false
 
 [workspace]
@@ -11,12 +12,6 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-xark = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03", default-features = false }
+xark = { path = "../../../xark/crates/lang" }
 # Poseidon2 as an ordinary Rust library the compiler inlines into the circuit.
-xark-poseidon2 = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }
-
-[dev-dependencies]
-# String-valued proving API for in-crate tests (a commitment is a full field
-# element, wider than the i128 the #[circuit] test struct can carry).
-xark-prover = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }
-xark-ir = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }
+xark-poseidon2 = { path = "../../../xark/gadgets/xark-poseidon2" }

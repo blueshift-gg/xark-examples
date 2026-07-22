@@ -1,0 +1,2 @@
+[check]
+overrideCommand = ["xark", "check", ".", "--message-format=json"]

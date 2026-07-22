@@ -68,6 +68,10 @@ circuits/withdraw/   proves membership + nullifier   (public: root, nullifier_ha
 program/             Anchor: verify both proofs, hold + pay lamports, track roots & nullifiers
 ```
 
+Each circuit exposes one typed `Witness` and one typed `Statement`, both derived with
+`CircuitInput`. Witness files therefore read as `witness.*` and `statement.*`, while the statement's
+flattened field order remains the verifier's public-input ABI.
+
 ## Run it
 
 ```bash

@@ -39,10 +39,12 @@ already binds it. ([Example 03](../../03-shielded-pool/) relies on this to stop 
 ## What xark hands you
 
 - `xark setup` → proving key + verifying key (+ snarkjs-compatible JSON).
-- `xark prove` → `proof.bin` + `public_inputs.bin` (+ snarkjs JSON).
-- `xark export` → a Rust verifier crate with the verifying key baked in, plus
-  `instruction_data.bin` = `proof (256 B) || public_inputs (N × 32 B, little-endian)` — the exact
-  bytes your program receives.
+- `xark prove` → Arkworks binaries, snarkjs JSON, and the Solana-native
+  `proof.solana.bin`, `public_inputs.solana.bin`, and `instruction_data.bin`.
+- `xark export` → a Rust verifier crate with the verifying key baked in.
+
+`instruction_data.bin` is `proof (256 B) || public inputs (N × 32 B, little-endian)` — the
+exact bytes your program receives.
 
 On-chain, your program does one thing: `verify_instruction_data(data)`. The `alt_bn128` syscalls do
 the heavy lifting.

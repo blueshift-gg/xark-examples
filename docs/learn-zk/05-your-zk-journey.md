@@ -10,8 +10,9 @@ Build a Rust range circuit, create a proof, export its verifier, and execute it 
 is to understand the build -> setup -> prove -> export -> on-chain loop.
 
 **Step 2 - Learn xark's Rust circuit subset.**
-Start with `Private<Field>`, `Public<Field>`, sized comparisons, arrays, fixed loops, and assertions.
-Use `xark check` continuously: an unsupported Rust construct should be redesigned, not worked around.
+Start with `Private<Field>`, `Public<Field>`, `CircuitInput`, sized comparisons, arrays, fixed loops,
+and `require*`. Use `xark check` continuously: an unsupported Rust construct should be redesigned,
+not worked around.
 
 **Step 3 - Build with commitments.**
 [Example 02](../../02-age-verification/) turns a bare range proof into a claim about a specific

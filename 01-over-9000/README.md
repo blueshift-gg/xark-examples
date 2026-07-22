@@ -9,18 +9,17 @@ that still does something real, and the range-proof mechanism under every later 
 use xark::prelude::*;
 
 #[circuit]
-pub fn circuit(power_level: Private<Field>) {
-    assert(power_level > 9000u64);
+pub fn over_9000(power_level: Private<u64>) {
+    require(power_level > 9000u64);
 }
 ```
 
 A few lines, three ideas:
 
 - **`Private` means witness.** `power_level` is an input the proof is computed from but never
-  reveals. The verifier ends up convinced the assertion held without learning the number.
-- **The width is a constraint.** A `Field` wraps around, so "greater than" has no meaning until you
-  fix a range — in xark the *comparison operand's type* supplies it: `> 9000u64` range-checks
-  `power_level` into `[0, 2⁶⁴)` (a 64-bit decomposition in R1CS) and only then orders it. Every
+  reveals. The verifier ends up convinced the requirement held without learning the number.
+- **The width is a constraint.** The `u64` input makes the range explicit: xark constrains
+  `power_level` to `[0, 2⁶⁴)` (a 64-bit decomposition in R1CS) and only then orders it. Every
   range proof — balances, ages, prices — is this one trick.
 - **Zero public inputs.** `9000` is a literal, so it is fixed inside the verifying key. Only the
   256-byte proof reaches the chain.
@@ -41,16 +40,16 @@ published commitment ([02](../02-age-verification/)) or a Merkle tree of deposit
 ```bash
 just build-program  # build → dev setup → prove/self-check → export → deployable .so
 cd ../e2e && cargo test over_9000   # verify the proof in a real Solana VM
-just test-circuit   # proving 9001 succeeds; proving 9000 fails
+just test-circuit   # the generated validator accepts 9001 and rejects 9000
 ```
 
 Prerequisites and toolchain versions: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks them).
 
 ## Experiments
 
-- `just test-circuit` runs the in-crate tests: proving with 9001 succeeds, with 9000 it must fail -
+- `just test-circuit` runs the generated host validator: 9001 succeeds, while 9000 must fail because
   no witness satisfies the circuit. That failure *is* the guarantee: you cannot prove a false
-  statement. Put `power_level = 9000` in an input file and pass it with `--input-file` for the CLI
+  statement. Put `power_level = 9000` in an input file and pass it with `--inputs` for the CLI
   version.
 - `just verify-snarkjs` checks the same proof in JavaScript. xark's artifacts are snarkjs-compatible,
   so one proof verifies in both a Solana program and a browser. (`xark client circuit` scaffolds a

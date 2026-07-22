@@ -19,7 +19,7 @@ use xark_examples_e2e::{
     split_pubkey,
 };
 
-/// One side of a JoinSplit as a flat `xark prove --input-file` document.
+/// One side of a JoinSplit inside the typed `xark prove --inputs` document.
 struct Args(Vec<String>);
 
 impl Args {
@@ -109,7 +109,7 @@ fn main() {
         let root = tree.root();
 
         let mut a = Args::new();
-        a.one("sk", sk);
+        a.one("witness.sk", sk);
 
         let (mut vals, mut ds, mut rhos, mut rseeds, mut enf) =
             (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
@@ -155,13 +155,13 @@ fn main() {
             bits_rows.push(bits.map(|b| Fr::from(b as u64)));
         }
 
-        a.many("in_value", &vals);
-        a.many("in_d", &ds);
-        a.many("in_rho", &rhos);
-        a.many("in_rseed", &rseeds);
-        a.grid("in_path", &paths);
-        a.grid("in_bits", &bits_rows);
-        a.many("in_enforce", &enf);
+        a.many("witness.in_value", &vals);
+        a.many("witness.in_d", &ds);
+        a.many("witness.in_rho", &rhos);
+        a.many("witness.in_rseed", &rseeds);
+        a.grid("witness.in_path", &paths);
+        a.grid("witness.in_bits", &bits_rows);
+        a.many("witness.in_enforce", &enf);
 
         let mut cms = Vec::new();
         let (mut ovals, mut oaddrs, mut orhos, mut orseeds) =
@@ -179,10 +179,10 @@ fn main() {
             orhos.push(Fr::from(rho));
             orseeds.push(Fr::from(rseed));
         }
-        a.many("out_value", &ovals);
-        a.many("out_addr", &oaddrs);
-        a.many("out_rho", &orhos);
-        a.many("out_rseed", &orseeds);
+        a.many("witness.out_value", &ovals);
+        a.many("witness.out_addr", &oaddrs);
+        a.many("witness.out_rho", &orhos);
+        a.many("witness.out_rseed", &orseeds);
 
         let insert_index = tree.next_index;
         let old_root = tree.root();
@@ -190,24 +190,24 @@ fn main() {
         tree.append(cms[1]);
         let new_root = tree.root();
 
-        a.many("filled_subtrees", &frontier);
-        a.one("root", root);
-        a.one("asset", asset);
-        a.many("nf", &nfs);
-        a.many("cm_out", &cms);
-        a.one("old_root", old_root);
-        a.one("new_root", new_root);
-        a.one("insert_index", Fr::from(insert_index));
-        a.one("vpub_in", Fr::from(vpub_in));
-        a.one("vpub_out", Fr::from(vpub_out));
-        a.one("fee", Fr::from(0u64));
-        a.one("recipient_hi", recipient_hi);
-        a.one("recipient_lo", recipient_lo);
+        a.many("witness.filled_subtrees", &frontier);
+        a.one("statement.root", root);
+        a.one("statement.asset", asset);
+        a.many("statement.nf", &nfs);
+        a.many("statement.cm_out", &cms);
+        a.one("statement.old_root", old_root);
+        a.one("statement.new_root", new_root);
+        a.one("statement.insert_index", Fr::from(insert_index));
+        a.one("statement.vpub_in", Fr::from(vpub_in));
+        a.one("statement.vpub_out", Fr::from(vpub_out));
+        a.one("statement.fee", Fr::from(0u64));
+        a.one("statement.recipient_hi", recipient_hi);
+        a.one("statement.recipient_lo", recipient_lo);
         for (i, memo) in memos.iter().enumerate() {
             let digest: [u8; 32] = Sha256::digest(memo).into();
             let (hi, lo) = split_pubkey(&digest);
-            a.one(&format!("memo{i}_hash_hi"), hi);
-            a.one(&format!("memo{i}_hash_lo"), lo);
+            a.one(&format!("statement.memo{i}_hash_hi"), hi);
+            a.one(&format!("statement.memo{i}_hash_lo"), lo);
         }
         a
     };

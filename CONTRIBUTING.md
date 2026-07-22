@@ -18,14 +18,14 @@ ignored `target/` and `chain/` directories. Never commit generated keys or real 
 
 ## Repository contracts
 
-- Keep the xark CLI, circuit crates, gadget crates, generated verifier dependency, CI revision, and
-  lockfiles on the same exact commit.
-- Keep `vendor/xark-verifier/src` byte-identical to the commit recorded in its `UPSTREAM.md`; its
-  standalone manifest may carry only the documented dynamic-syscall compatibility change.
+- Keep circuit/gadget sources, the CLI/driver checkout, generated verifier dependency, CI checkout,
+  and lockfiles aligned as documented in `RUNBOOK.md`.
+- Build every generated verifier program with plain `cargo build-sbf`; target selection belongs to
+  the pinned Solana toolchain, not each example.
 - Treat public-input order as an API. A change must update the circuit, program calldata, witness
   generator, E2E instruction builder, README reference, and expected input count together.
 - Keep private witness values out of command-line arguments. Generate a mode-`0600` temporary file
-  and use `xark prove --input-file`.
+  and use `xark prove --inputs`.
 - Regenerate `e2e/src/poseidon2.rs`, the Merkle zero table, and both on-chain empty-root constants if
   their pinned upstream definitions change.
 - Preserve the explicit dev-key warnings. Production ceremony artifacts do not belong in example

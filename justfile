@@ -8,7 +8,7 @@ set shell := ["bash", "-uc"]
 
 # One command: build all artifacts, then verify every proof in a Solana VM.
 test: build-all
-    cd e2e && cargo test
+    cd e2e && cargo test --locked
 
 # Build all four examples (circuits → proofs → verifier crates → programs).
 build-all:
@@ -21,7 +21,9 @@ build-all:
     cd 04-shielded-transfer && just gen-chain
     cd 04-shielded-transfer && just build-program
 
-# Run every circuit's in-crate tests (xark build + cargo test via xark-prover).
+# Run the circuits that define native unit cases. The protocol-sized 03/04
+# relations are exercised with real generated witnesses and Groth16 proofs by
+# `just test`; invoking `xark test` there would only report "0 tests".
 test-circuits:
     xark test 01-over-9000/circuit
     xark test 02-age-verification/circuit
@@ -47,7 +49,6 @@ fmt-check:
     cargo fmt --check --manifest-path 04-shielded-transfer/circuits/transact/Cargo.toml
     cargo fmt --check --manifest-path 04-shielded-transfer/program/Cargo.toml
     cargo fmt --check --manifest-path e2e/Cargo.toml
-    cargo fmt --check --manifest-path vendor/xark-verifier/Cargo.toml
 
 # Run after `build-all`, which generates the verifier crates used by programs.
 clippy:
@@ -62,7 +63,6 @@ clippy:
     cargo clippy --manifest-path 04-shielded-transfer/circuits/transact/Cargo.toml --all-targets --locked -- -D warnings
     cargo clippy --manifest-path 04-shielded-transfer/program/Cargo.toml --workspace --all-targets --locked -- -D warnings
     cargo clippy --manifest-path e2e/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path vendor/xark-verifier/Cargo.toml --all-targets -- -D warnings
 
 clean:
     cd 01-over-9000 && just clean

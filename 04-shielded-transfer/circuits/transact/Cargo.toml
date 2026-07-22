@@ -2,7 +2,8 @@
 [package]
 name = "shielded_transact"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+license = "MIT"
 publish = false
 
 [workspace]
@@ -11,8 +12,8 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-xark = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03", default-features = false }
-xark-poseidon2 = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }
+xark = { path = "../../../../xark/crates/lang" }
+xark-poseidon2 = { path = "../../../../xark/gadgets/xark-poseidon2" }
 # 03's Merkle gadget, reused as an ordinary crate — same tree, same hash,
 # same zero constants. Gadget reuse is the point of circuits-as-Rust.
 pool-merkle = { path = "../../../03-shielded-pool/circuits/merkle" }

@@ -78,7 +78,9 @@ The e2e ([`../e2e/tests/transfer.rs`](../e2e/tests/transfer.rs)) runs the whole 
 Alice shields 150 → privately pays Bob 100 with 50 change (no tokens move) → Bob withdraws 100; the
 vault ends at 50, Alice's change still shielded. The `transfer-witness` bin in [`../e2e`](../e2e/)
 is the reference wallet: it replays the evolving tree natively (same KAT-pinned Poseidon2 as the
-circuit) and writes each transaction's flat `xark prove --input-file` document.
+circuit) and writes each transaction's typed `xark prove --inputs` document. Its names are grouped
+under `witness.*` and `statement.*`; `xark inspect` shows the exact flattened order consumed by the
+verifier.
 
 ## Anatomy
 

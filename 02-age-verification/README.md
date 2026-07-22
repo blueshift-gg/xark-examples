@@ -25,26 +25,34 @@ commitment = Poseidon2(birth_year, nonce)
 use xark::prelude::*;
 use xark_poseidon2::hash2;
 
-pub fn circuit(
-    birth_year: Private<Field>,
-    nonce: Private<Field>,
+#[derive(Clone, Copy, Debug, CircuitInput)]
+pub struct Identity {
+    pub birth_year: Field,
+    pub nonce: Field,
+}
+
+#[circuit]
+pub fn age_verification(
+    identity: Private<Identity>,
     commitment: Public<Field>,
     current_year: Public<Field>,
 ) {
     // Prove we know the opening of the published commitment.
-    assert_eq(hash2(birth_year, nonce), commitment);
+    require_eq(hash2(identity.birth_year, identity.nonce), commitment);
     // Then the range check — same mechanism as example 01. The explicit ::<32>
     // width bounds both years, so the subtraction below cannot wrap the field.
-    assert(current_year.ge::<32>(birth_year));
-    assert(current_year - birth_year >= 18u32);
+    require(current_year.ge::<32>(identity.birth_year));
+    require(current_year - identity.birth_year >= 18u32);
 }
 ```
 
-Two public inputs (`commitment`, `current_year`), two private (`birth_year`, `nonce`). The first
-assertion is the load-bearing one: it binds the range check to a *specific published commitment*, so
-unlike example 01 you can't invent a convenient number — you have to know the opening of a commitment
-someone already trusts. `hash2` comes from the `xark-poseidon2` gadget crate — an ordinary Rust
-library the compiler inlines into the circuit.
+Two public inputs (`commitment`, `current_year`), two private leaves
+(`identity.birth_year`, `identity.nonce`). `CircuitInput` keeps related credential data in one Rust
+type while preserving an explicit flattened witness contract. The first requirement is the
+load-bearing one: it binds the range check to a *specific published commitment*, so unlike example
+01 you can't invent a convenient number — you have to know the opening of a commitment someone
+already trusts. `hash2` comes from the `xark-poseidon2` gadget crate — an ordinary Rust library the
+compiler inlines into the circuit.
 
 The idea to carry forward: **a ZK proof guarantees consistency, not honesty.** It proves the birth
 year inside the commitment is at least 18 years ago; it says nothing about whether the commitment

@@ -12,10 +12,11 @@ any code.
 ## The idea in one paragraph
 
 A circuit is a computation you can *prove you ran correctly* without revealing its inputs. With
-xark you write it as a plain Rust function — `Private<Field>` / `Public<Field>` mark input
-visibility, `assert*` state the constraints that must hold — and the compiler drives rustc itself,
-extracts the MIR, and lowers it to R1CS. No separate circuit language: gadgets (Poseidon2, Merkle
-trees, …) are ordinary Rust crates you import, and this repo's circuits share one the same way.
+xark you write it as a plain Rust function — `Private<T>` / `Public<T>` mark input visibility,
+`#[derive(CircuitInput)]` gives larger inputs one typed shape, and `require*` states what must hold —
+and the compiler drives rustc itself, extracts the MIR, and lowers it to R1CS. No separate circuit
+language: gadgets (Poseidon2, Merkle trees, …) are ordinary Rust crates you import, and this repo's
+circuits share one the same way.
 xark then produces a ~256-byte Groth16 proof and generates a Solana verifier crate that checks it
 through the native `alt_bn128` syscalls. The payoff: a program can act on *"this statement is
 true"* — you're over 18, this note is unspent, the amounts balance — without ever seeing the
@@ -37,8 +38,8 @@ public, and what must hold between them**; the examples below are that choice ma
   Rust circuit      you write the rules: what's secret, what's public, what must hold
      │ xark build     (xark drives rustc → MIR → xark-IR → R1CS)
      ▼
-  circuit + R1CS    target/xark/<name>/{circuit,r1cs}.json
-     │ xark setup / prove --input-file ...   (solves the witness, proves, self-checks)
+  circuit + R1CS    target/xark/<name>/circuit.xbc (`--emit-json` for expanded IR)
+     │ xark setup / prove --inputs ...   (solves the witness, proves, self-checks)
      ▼
   proof + verifier  a 256-byte proof; `xark export` emits a verifier crate with the VK baked in
      │
@@ -56,8 +57,13 @@ re-run `just export`; the program continues to depend on the generated crate.
 
 ```bash
 cd 01-over-9000
+# The direct circuit loop is deliberately boring:
+xark build circuit
+xark setup circuit
+xark test circuit
+
+# Then take the same proof on chain:
 just build-program  # circuit → dev setup → proof → verifier crate → deployable .so
-just test-circuit   # optional circuit pass/fail tests
 ```
 
 Each example's README walks its circuit; [RUNBOOK.md](./RUNBOOK.md) has the full toolchain

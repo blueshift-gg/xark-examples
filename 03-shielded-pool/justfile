@@ -9,16 +9,16 @@ prove-deposit:
     xark build circuits/deposit
     xark inspect circuits/deposit
     xark setup circuits/deposit
-    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; (cd ../e2e && cargo run -q --bin pool-witness -- deposit) > "$tmp"; xark prove circuits/deposit --input-file "$tmp"
-    xark export circuits/deposit --allow-insecure --crate-name shielded-pool-deposit-xark-verifier --verifier-dep '{ git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }'
+    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; (cd ../e2e && cargo run -q --locked --bin pool-witness -- deposit) > "$tmp"; xark prove circuits/deposit --inputs "$tmp"
+    xark export circuits/deposit --allow-insecure --crate-name shielded-pool-deposit-xark-verifier
 
 # Prove + export the WITHDRAW circuit (spends the index-0 note).
 prove-withdraw:
     xark build circuits/withdraw
     xark inspect circuits/withdraw
     xark setup circuits/withdraw
-    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; (cd ../e2e && cargo run -q --bin pool-witness -- withdraw) > "$tmp"; xark prove circuits/withdraw --input-file "$tmp"
-    xark export circuits/withdraw --allow-insecure --crate-name shielded-pool-withdraw-xark-verifier --verifier-dep '{ git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }'
+    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; (cd ../e2e && cargo run -q --locked --bin pool-witness -- withdraw) > "$tmp"; xark prove circuits/withdraw --inputs "$tmp"
+    xark export circuits/withdraw --allow-insecure --crate-name shielded-pool-withdraw-xark-verifier
 
 # Build the Anchor program (run prove-deposit AND prove-withdraw first — they
 # generate the two verifier crates the program depends on).

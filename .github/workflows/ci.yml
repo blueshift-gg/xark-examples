@@ -26,6 +26,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: blueshift-gg/xark
+          # Temporary cross-repository dogfood pin. Move back to `master` when
+          # the Xark dogfood PR merges; use the release after 0.2.2 ships.
+          ref: codex/xark-0.2.2-dogfood
           path: xark
 
       - name: Install Rust tooling

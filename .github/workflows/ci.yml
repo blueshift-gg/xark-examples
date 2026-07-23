@@ -27,7 +27,7 @@ jobs:
         with:
           repository: blueshift-gg/xark
           # Temporary cross-repository dogfood pin. Move back to `master` when
-          # the Xark dogfood PR merges; use the release after 0.2.2 ships.
+          # blueshift-gg/xark#29 merges; use the release after 0.2.2 ships.
           ref: codex/xark-0.2.2-dogfood
           path: xark
 

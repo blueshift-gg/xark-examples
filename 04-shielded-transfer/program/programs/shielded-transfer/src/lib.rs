@@ -6,31 +6,31 @@
 //! advances the tree to `new_root`, moves SPL for the public value slots, and
 //! emits the two proof-bound encrypted memos for scanning wallets.
 //!
-//! Verifier calldata is the 256-byte proof followed by the circuit's 18 public
-//! inputs, each a 32-byte little-endian field element, in declaration order.
+//! The proof is checked against the circuit's 21 public inputs, which the program
+//! assembles itself from its state and the transaction: 32-byte little-endian
+//! field elements, in the circuit's order.
 //!
 //! Reference implementation — unaudited, educational. See the README.
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-use shielded_transfer_transact_xark_verifier as verifier;
+use shielded_transfer_transact_xark_verifier::{verify, Proof};
 use solana_sha256_hasher::hash;
 
 declare_id!("CUCcJJBRbK6tK4nPP2zgmvdYbKWSCGGVdRegtJ2GPJtF");
 
 const TREE_HEIGHT: u32 = 20;
 const ROOT_HISTORY_SIZE: usize = 16;
-const PROOF_LEN: usize = 256;
 
 const POOL_SEED: &[u8] = b"pool";
 const VAULT_SEED: &[u8] = b"vault";
 const NULLIFIER_SEED: &[u8] = b"nullifier";
 
-// Root of an all-empty height-20 tree under the circuit's Poseidon2, LE.
-// Regenerate with `cargo run --bin transfer-witness -- empty-root` (e2e crate).
+// The empty tree's root, little-endian: the first transaction's `old_root`. The
+// client tests check it against the circuit's `Path.first().treeRoot()`.
 const EMPTY_ROOT: [u8; 32] = [
-    251, 142, 67, 247, 199, 111, 241, 124, 245, 96, 180, 214, 179, 51, 248, 149, 20, 177, 173, 83,
-    193, 126, 124, 38, 168, 0, 139, 11, 55, 225, 46, 3,
+    26, 122, 47, 146, 164, 115, 191, 166, 88, 234, 28, 252, 38, 169, 221, 171, 246, 159, 204, 103,
+    2, 229, 199, 103, 212, 104, 254, 41, 151, 59, 127, 46,
 ];
 
 #[program]
@@ -53,7 +53,7 @@ pub mod shielded_transfer {
     #[allow(clippy::too_many_arguments)]
     pub fn transact(
         ctx: Context<Transact>,
-        proof: Vec<u8>,
+        proof: [u8; 256],
         root: [u8; 32],
         nf: [[u8; 32]; 2],
         cm_out: [[u8; 32]; 2],
@@ -65,58 +65,63 @@ pub mod shielded_transfer {
         memo1: Vec<u8>,
     ) -> Result<()> {
         let pool = &ctx.accounts.pool;
-        require!(proof.len() == PROOF_LEN, PoolError::BadProofLen);
         require!(
             (pool.next_index as u64 + 2) <= (1u64 << TREE_HEIGHT),
             PoolError::TreeFull
         );
         require!(pool.knows_root(&root), PoolError::UnknownRoot);
-        // The circuit binds `fee` so a relayer flow can charge one, but this
-        // program doesn't route fees anywhere — reject nonzero rather than
-        // silently swallowing a public input.
-        require!(fee == 0, PoolError::FeeNotSupported);
 
-        let (recipient_hi, recipient_lo) =
-            split_bytes(&ctx.accounts.recipient_token.key().to_bytes());
-        let (memo0_hash_hi, memo0_hash_lo) = split_bytes(&hash(&memo0).to_bytes());
-        let (memo1_hash_hi, memo1_hash_lo) = split_bytes(&hash(&memo1).to_bytes());
-
-        // Public inputs in the transact circuit's order.
-        let calldata = verifier_calldata(
-            &proof,
-            &[
-                root,
-                asset_from_mint(&pool.mint),
-                nf[0],
-                nf[1],
-                cm_out[0],
-                cm_out[1],
-                pool.current_root(),
-                new_root,
-                field_from_u64(pool.next_index as u64),
-                field_from_u64(vpub_in),
-                field_from_u64(vpub_out),
-                field_from_u64(fee),
-                recipient_hi,
-                recipient_lo,
-                memo0_hash_hi,
-                memo0_hash_lo,
-                memo1_hash_hi,
-                memo1_hash_lo,
-            ],
-        );
+        // The transact circuit's public `Transaction`, field by field.
+        let [asset_hi, asset_lo] = halves(&pool.mint.to_bytes());
+        // Without a withdrawal there's no recipient, and without a fee no relayer:
+        // the proof binds this program's address in their place.
+        let address = |a: &Option<Box<Account<TokenAccount>>>| {
+            halves(&a.as_ref().map_or(crate::ID, |a| a.key()).to_bytes())
+        };
+        let [recipient_hi, recipient_lo] = address(&ctx.accounts.recipient_token);
+        let [relayer_hi, relayer_lo] = address(&ctx.accounts.relayer_token);
+        let [memo0_hi, memo0_lo] = halves(&hash(&memo0).to_bytes());
+        let [memo1_hi, memo1_lo] = halves(&hash(&memo1).to_bytes());
+        let public_inputs = [
+            root,
+            asset_hi,
+            asset_lo,
+            nf[0],
+            nf[1],
+            cm_out[0],
+            cm_out[1],
+            pool.current_root(),
+            new_root,
+            field_from_u64(pool.next_index as u64),
+            field_from_u64(vpub_in),
+            field_from_u64(vpub_out),
+            field_from_u64(fee),
+            recipient_hi,
+            recipient_lo,
+            relayer_hi,
+            relayer_lo,
+            memo0_hi,
+            memo0_lo,
+            memo1_hi,
+            memo1_lo,
+        ];
         require!(
-            verifier::verify_instruction_data(&calldata),
+            verify(&Proof::from_le_bytes(&proof), &public_inputs),
             PoolError::InvalidProof
         );
 
         // Public value entering the shield: user → vault.
         if vpub_in > 0 {
+            let user_token = ctx
+                .accounts
+                .user_token
+                .as_ref()
+                .ok_or(PoolError::NoSource)?;
             token::transfer(
                 CpiContext::new(
                     ctx.accounts.token_program.key(),
                     Transfer {
-                        from: ctx.accounts.user_token.to_account_info(),
+                        from: user_token.to_account_info(),
                         to: ctx.accounts.vault.to_account_info(),
                         authority: ctx.accounts.user.to_account_info(),
                     },
@@ -125,22 +130,34 @@ pub mod shielded_transfer {
             )?;
         }
 
-        // Public value leaving the shield: vault → recipient, signed by the pool PDA.
-        if vpub_out > 0 {
-            let (mint, bump) = (pool.mint, pool.bump);
-            let signer: &[&[&[u8]]] = &[&[POOL_SEED, mint.as_ref(), &[bump]]];
-            token::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.key(),
-                    Transfer {
-                        from: ctx.accounts.vault.to_account_info(),
-                        to: ctx.accounts.recipient_token.to_account_info(),
-                        authority: ctx.accounts.pool.to_account_info(),
-                    },
-                    signer,
-                ),
+        // Public value leaving the shield, signed by the pool PDA: `vpub_out` to the
+        // recipient, `fee` to the relayer.
+        let (mint, bump) = (pool.mint, pool.bump);
+        let signer: &[&[&[u8]]] = &[&[POOL_SEED, mint.as_ref(), &[bump]]];
+        let payouts = [
+            (
                 vpub_out,
-            )?;
+                &ctx.accounts.recipient_token,
+                PoolError::NoRecipient,
+            ),
+            (fee, &ctx.accounts.relayer_token, PoolError::NoRelayer),
+        ];
+        for (amount, to, missing) in payouts {
+            if amount > 0 {
+                let to = to.as_ref().ok_or(missing)?;
+                token::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_program.key(),
+                        Transfer {
+                            from: ctx.accounts.vault.to_account_info(),
+                            to: to.to_account_info(),
+                            authority: ctx.accounts.pool.to_account_info(),
+                        },
+                        signer,
+                    ),
+                    amount,
+                )?;
+            }
         }
 
         // Advance the tree past the two appended leaves and publish the memos
@@ -191,7 +208,7 @@ pub struct Initialize<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(proof: Vec<u8>, root: [u8; 32], nf: [[u8; 32]; 2])]
+#[instruction(proof: [u8; 256], root: [u8; 32], nf: [[u8; 32]; 2])]
 pub struct Transact<'info> {
     #[account(mut, seeds = [POOL_SEED, pool.mint.as_ref()], bump = pool.bump)]
     pub pool: Box<Account<'info, Pool>>,
@@ -206,13 +223,17 @@ pub struct Transact<'info> {
 
     #[account(mut)]
     pub user: Signer<'info>,
-    /// Source for `vpub_in` (deposit). Unused when `vpub_in` is 0.
+    /// Source for `vpub_in` (a deposit); left out when `vpub_in` is 0.
     #[account(mut)]
-    pub user_token: Box<Account<'info, TokenAccount>>,
-    /// Destination for `vpub_out` (withdraw). Its full address is bound into
-    /// the proof; unused when `vpub_out` is 0.
+    pub user_token: Option<Box<Account<'info, TokenAccount>>>,
+    /// Destination for `vpub_out` (a withdrawal), its address bound into the
+    /// proof; left out when `vpub_out` is 0.
     #[account(mut)]
-    pub recipient_token: Box<Account<'info, TokenAccount>>,
+    pub recipient_token: Option<Box<Account<'info, TokenAccount>>>,
+    /// Destination for `fee`: the token account of whoever relays the transaction,
+    /// its address bound into the proof; left out when `fee` is 0.
+    #[account(mut)]
+    pub relayer_token: Option<Box<Account<'info, TokenAccount>>>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -262,29 +283,21 @@ pub struct MemoEvent {
 
 #[error_code]
 pub enum PoolError {
-    #[msg("proof must be 256 bytes")]
-    BadProofLen,
     #[msg("invalid proof")]
     InvalidProof,
     #[msg("unknown or stale merkle root")]
     UnknownRoot,
     #[msg("tree is full")]
     TreeFull,
-    #[msg("fee routing is not implemented; pass fee = 0")]
-    FeeNotSupported,
+    #[msg("a deposit (vpub_in > 0) needs user_token")]
+    NoSource,
+    #[msg("a withdrawal (vpub_out > 0) needs recipient_token")]
+    NoRecipient,
+    #[msg("a fee (fee > 0) needs relayer_token")]
+    NoRelayer,
 }
 
-// ---- verifier plumbing ---------------------------------------------------------
-
-/// proof ‖ public inputs — the exact byte string the generated verifier checks.
-fn verifier_calldata(proof: &[u8], public_inputs: &[[u8; 32]]) -> Vec<u8> {
-    let mut data = Vec::with_capacity(proof.len() + 32 * public_inputs.len());
-    data.extend_from_slice(proof);
-    for input in public_inputs {
-        data.extend_from_slice(input);
-    }
-    data
-}
+// ---- public inputs -------------------------------------------------------------
 
 /// A u64 as a 32-byte little-endian field element.
 fn field_from_u64(x: u64) -> [u8; 32] {
@@ -293,20 +306,14 @@ fn field_from_u64(x: u64) -> [u8; 32] {
     out
 }
 
-/// Split any 32-byte value into two 128-bit field elements:
-/// `lo` = bytes[0..16], `hi` = bytes[16..32].
-fn split_bytes(bytes: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-    let mut hi = [0u8; 32];
-    let mut lo = [0u8; 32];
-    lo[..16].copy_from_slice(&bytes[..16]);
-    hi[..16].copy_from_slice(&bytes[16..]);
-    (hi, lo)
-}
-
-/// The circuit's per-token asset tag: the low 16 bytes of the mint pubkey
-/// (< 2^128, so it always fits the field).
-fn asset_from_mint(mint: &Pubkey) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    out[..16].copy_from_slice(&mint.to_bytes()[..16]);
-    out
+/// 32 bytes as the circuit takes an `Address` or a `Hash`: `[hi, lo]`, each 16-byte
+/// half read as a big-endian integer, as 32-byte little-endian field elements.
+fn halves(bytes: &[u8; 32]) -> [[u8; 32]; 2] {
+    let half = |b: &[u8]| {
+        let mut out = [0u8; 32];
+        out[..16].copy_from_slice(b);
+        out[..16].reverse();
+        out
+    };
+    [half(&bytes[..16]), half(&bytes[16..])]
 }

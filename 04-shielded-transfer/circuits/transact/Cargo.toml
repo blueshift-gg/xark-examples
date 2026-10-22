@@ -1,4 +1,5 @@
-# Shielded transfer — the JoinSplit `transact` circuit crate (Rust → R1CS).
+# The shielded transfer's JoinSplit circuit: an ordinary Rust crate xark compiles
+# to R1CS.
 [package]
 name = "shielded_transact"
 version = "0.1.0"
@@ -8,12 +9,11 @@ publish = false
 
 [workspace]
 
-[lib]
-path = "src/lib.rs"
-
 [dependencies]
-xark = { path = "../../../../xark/crates/lang" }
-xark-poseidon2 = { path = "../../../../xark/gadgets/xark-poseidon2" }
-# 03's Merkle gadget, reused as an ordinary crate — same tree, same hash,
-# same zero constants. Gadget reuse is the point of circuits-as-Rust.
-pool-merkle = { path = "../../../03-shielded-pool/circuits/merkle" }
+xark = { path = "../../../../xark/crates/lang", version = "0.3.0" }
+xark-poseidon2 = { path = "../../../../xark/gadgets/xark-poseidon2", version = "0.3.0" }
+# 03's tree and addresses, as an ordinary crate: the same tree, hash and zeros.
+pool = { path = "../../../03-shielded-pool/circuits/pool" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

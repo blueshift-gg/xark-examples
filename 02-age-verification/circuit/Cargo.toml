@@ -1,4 +1,4 @@
-# The age-verification circuit — plain Rust that xark compiles to R1CS.
+# The age-verification circuit: an ordinary Rust crate that xark compiles to R1CS.
 [package]
 name = "age_verification"
 version = "0.1.0"
@@ -8,10 +8,10 @@ publish = false
 
 [workspace]
 
-[lib]
-path = "src/lib.rs"
-
 [dependencies]
-xark = { path = "../../../xark/crates/lang" }
-# Poseidon2 as an ordinary Rust library the compiler inlines into the circuit.
-xark-poseidon2 = { path = "../../../xark/gadgets/xark-poseidon2" }
+xark = { path = "../../../xark/crates/lang", version = "0.3.0" }
+xark-poseidon2 = { path = "../../../xark/gadgets/xark-poseidon2", version = "0.3.0" }
+xark-hash = { path = "../../../xark/gadgets/xark-hash", version = "0.3.0" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

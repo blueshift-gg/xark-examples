@@ -1,72 +1,34 @@
-# Build every example end to end, then run the in-process (LiteSVM) test suite.
-# Requires the toolchain in RUNBOOK.md (xark + its pinned nightly, anza CLI).
-#
-# This is the orchestrator: each recipe delegates to the example's own justfile,
-# which stays self-contained so it reads top-to-bottom on its own.
+# Every example, end to end: build its circuits, keys, verifier crates, TypeScript
+# clients and program, then prove with the clients and verify on-chain (LiteSVM).
+# Prerequisites: RUNBOOK.md. Each example's own justfile reads top to bottom.
 
-set shell := ["bash", "-uc"]
+set shell := ["bash", "-euo", "pipefail", "-c"]
 
-# One command: build all artifacts, then verify every proof in a Solana VM.
-test: build-all
-    cd e2e && cargo test --locked
+examples := "01-over-9000 02-age-verification 03-shielded-pool 04-shielded-transfer"
 
-# Build all four examples (circuits → proofs → verifier crates → programs).
-build-all:
-    cd 01-over-9000 && just build-program
-    cd 02-age-verification && just build-program
-    cd 03-shielded-pool && just prove-deposit
-    cd 03-shielded-pool && just prove-withdraw
-    cd 03-shielded-pool && just build-program
-    cd 04-shielded-transfer && just setup
-    cd 04-shielded-transfer && just gen-chain
-    cd 04-shielded-transfer && just build-program
+# Build everything, then run every example's client tests.
+test: build
+    [ -d node_modules ] || npm ci
+    npm test
 
-# Run the circuits that define native unit cases. The protocol-sized 03/04
-# relations are exercised with real generated witnesses and Groth16 proofs by
-# `just test`; invoking `xark test` there would only report "0 tests".
+build:
+    for e in {{examples}}; do just --justfile $e/justfile --working-directory $e build; done
+
+# The circuits' own Rust tests.
 test-circuits:
-    xark test 01-over-9000/circuit
-    xark test 02-age-verification/circuit
+    for e in {{examples}}; do just --justfile $e/justfile --working-directory $e test-circuit; done
 
-# Validate every circuit against xark's supported Rust subset.
-check-circuits:
-    xark check 01-over-9000/circuit
-    xark check 02-age-verification/circuit
-    xark check 03-shielded-pool/circuits/deposit
-    xark check 03-shielded-pool/circuits/withdraw
-    xark check 04-shielded-transfer/circuits/transact
+# The committed clients are the ones `just build` generates from the circuits.
+check-clients: build
+    git diff --exit-code -- '*/client/'
+    test -z "$(git status --porcelain -- '*/client/')"
 
-# One formatting gate for all standalone crates/workspaces.
 fmt-check:
-    cargo fmt --check --manifest-path 01-over-9000/circuit/Cargo.toml
-    cargo fmt --check --manifest-path 01-over-9000/program/Cargo.toml
-    cargo fmt --check --manifest-path 02-age-verification/circuit/Cargo.toml
-    cargo fmt --check --manifest-path 02-age-verification/program/Cargo.toml
-    cargo fmt --check --manifest-path 03-shielded-pool/circuits/deposit/Cargo.toml
-    cargo fmt --check --manifest-path 03-shielded-pool/circuits/merkle/Cargo.toml
-    cargo fmt --check --manifest-path 03-shielded-pool/circuits/withdraw/Cargo.toml
-    cargo fmt --check --manifest-path 03-shielded-pool/program/Cargo.toml
-    cargo fmt --check --manifest-path 04-shielded-transfer/circuits/transact/Cargo.toml
-    cargo fmt --check --manifest-path 04-shielded-transfer/program/Cargo.toml
-    cargo fmt --check --manifest-path e2e/Cargo.toml
+    for m in $(git ls-files '*Cargo.toml'); do cargo fmt --check --manifest-path $m; done
 
-# Run after `build-all`, which generates the verifier crates used by programs.
+# After `build`, which generates the verifier crates the programs depend on.
 clippy:
-    cargo clippy --manifest-path 01-over-9000/circuit/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 01-over-9000/program/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 02-age-verification/circuit/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 02-age-verification/program/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 03-shielded-pool/circuits/deposit/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 03-shielded-pool/circuits/merkle/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 03-shielded-pool/circuits/withdraw/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 03-shielded-pool/program/Cargo.toml --workspace --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 04-shielded-transfer/circuits/transact/Cargo.toml --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path 04-shielded-transfer/program/Cargo.toml --workspace --all-targets --locked -- -D warnings
-    cargo clippy --manifest-path e2e/Cargo.toml --all-targets --locked -- -D warnings
+    for m in $(git ls-files '*Cargo.toml'); do cargo clippy --manifest-path $m --workspace --all-targets --locked -- -D warnings; done
 
 clean:
-    cd 01-over-9000 && just clean
-    cd 02-age-verification && just clean
-    cd 03-shielded-pool && just clean
-    cd 04-shielded-transfer && just clean
-    rm -rf e2e/target
+    for e in {{examples}}; do just --justfile $e/justfile --working-directory $e clean; done

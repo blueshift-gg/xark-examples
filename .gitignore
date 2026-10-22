@@ -1,16 +1,16 @@
-# Build artifacts (regenerate with `just prove` / `just export` / `cargo build-sbf`)
+# Build artifacts (regenerate with `just build`)
 **/target/
+node_modules/
 *.gz
 
 # Rust — commit lockfiles for reproducible example builds
 Cargo.lock
-!e2e/Cargo.lock
 !01-over-9000/circuit/Cargo.lock
 !01-over-9000/program/Cargo.lock
 !02-age-verification/circuit/Cargo.lock
 !02-age-verification/program/Cargo.lock
 !03-shielded-pool/circuits/deposit/Cargo.lock
-!03-shielded-pool/circuits/merkle/Cargo.lock
+!03-shielded-pool/circuits/pool/Cargo.lock
 !03-shielded-pool/circuits/withdraw/Cargo.lock
 !03-shielded-pool/program/Cargo.lock
 !04-shielded-transfer/circuits/transact/Cargo.lock
@@ -19,9 +19,6 @@ Cargo.lock
 # Anchor
 .anchor/
 test-ledger/
-
-# 04: generated proof chain (regenerate with `just gen-chain`)
-04-shielded-transfer/circuits/transact/chain/
 
 # Keys & secrets — never commit
 *-keypair.json

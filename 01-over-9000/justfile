@@ -1,37 +1,26 @@
-# over-9000 — the full xark pipeline, one command at a time.
-# Requires: the `xark` CLI + its pinned nightly (`xark doctor` checks both) and,
-# for build-program, the Anza CLI (cargo-build-sbf). See ../RUNBOOK.md.
+# over-9000: circuit → dev keys → verifier crate → TS client → program.
+# Prerequisites: ../RUNBOOK.md. The root `just test` runs client/ against the program.
 
-set shell := ["bash", "-uc"]
+set shell := ["bash", "-euo", "pipefail", "-c"]
 
-# Compile the circuit (Rust → MIR → R1CS), generate keys (DEV MODE), prove, verify.
-prove:
+build:
+    @xark --version | grep -q '^xark 0\.3\.' || { echo "needs xark 0.3: see ../RUNBOOK.md" >&2; exit 1; }
     xark build circuit
-    xark inspect circuit
-    # No .ptau → setup falls back to a DEV-MODE key and says so. NEVER ship it;
-    # use `xark ceremony` (or `xark setup --ptau-file`) for anything real.
-    xark setup circuit
-    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; printf 'power_level = 9001\n' > "$tmp"; xark prove circuit --inputs "$tmp"
+    # DEV keys from local randomness: never deploy them (see ../RUNBOOK.md).
+    xark setup circuit --insecure-dev-mode --r1cs-form reduced
+    # The verifier crate's self-test vector: a proof of 9001.
+    xark prove circuit --inputs '{"power_level": 9001}'
+    xark export circuit --allow-insecure --crate-name over-9000-xark-verifier
+    xark client circuit --out client/
+    cd program && cargo build-sbf --arch v3
 
-# Run the in-crate circuit tests (xark build + generated native validator).
+# The circuit's own tests: 9001 passes, 9000 doesn't.
 test-circuit:
     xark test circuit
 
-# Generate the self-contained on-chain verifier crate (VK embedded).
-export: prove
-    xark export circuit --allow-insecure --crate-name over-9000-xark-verifier
-    @echo "→ verifier crate + instruction_data.bin at circuit/target/xark/over_9000/verifier/"
-
-# Build the Solana program (needs cargo-build-sbf from the Anza CLI).
-build-program: export
-    cd program && cargo build-sbf
-
-# Verify the exported proof in JS too (snarkjs interop) — optional.
-verify-snarkjs: prove
-    cd circuit && snarkjs groth16 verify \
-        target/xark/over_9000/snarkjs-verification_key.json \
-        target/xark/over_9000/snarkjs-public.json \
-        target/xark/over_9000/snarkjs-proof.json
+# Build, then prove with the client and verify on-chain (LiteSVM). `npm install` first.
+test: build
+    npm test
 
 clean:
     rm -rf circuit/target program/target

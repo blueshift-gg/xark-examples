@@ -1,4 +1,4 @@
-# The "over 9000" circuit — an ordinary Rust crate that xark compiles to R1CS.
+# The "over 9000" circuit: an ordinary Rust crate that xark compiles to R1CS.
 [package]
 name = "over_9000"
 version = "0.1.0"
@@ -8,8 +8,8 @@ publish = false
 
 [workspace]
 
-[lib]
-path = "src/lib.rs"
-
 [dependencies]
-xark = { path = "../../../xark/crates/lang" }
+xark = { path = "../../../xark/crates/lang", version = "0.3.0" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

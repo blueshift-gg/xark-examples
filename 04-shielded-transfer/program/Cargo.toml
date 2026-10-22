@@ -6,3 +6,8 @@ resolver = "2"
 overflow-checks = true
 lto = "fat"
 codegen-units = 1
+
+# Until xark 0.3.0 is on crates.io: the generated verifier crate pins
+# `xark-verifier = "=0.3.0"`, served here by the sibling xark checkout.
+[patch.crates-io]
+xark-verifier = { path = "../../../xark/crates/verifier" }

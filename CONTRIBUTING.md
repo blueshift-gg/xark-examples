@@ -2,32 +2,38 @@
 
 ## Setup
 
-Install the pinned toolchain from `RUNBOOK.md`, then run:
+Install the toolchain from `RUNBOOK.md`, then run:
 
 ```bash
 xark doctor
 just fmt-check
-just check-circuits
 just test-circuits
 just test
 just clippy
+just check-clients
 ```
 
-`just test` generates development proving keys, proofs, verifier crates, and SBF artifacts under
-ignored `target/` and `chain/` directories. Never commit generated keys or real witness data.
+`just test` makes development keys, verifier crates, clients and SBF programs under ignored
+`target/` directories, then proves with each client and verifies on-chain in LiteSVM. Never commit
+generated keys or real witness data.
 
 ## Repository contracts
 
-- Keep circuit/gadget sources, the CLI/driver checkout, generated verifier dependency, CI checkout,
-  and lockfiles aligned as documented in `RUNBOOK.md`.
-- Build every generated verifier program with plain `cargo build-sbf`; target selection belongs to
-  the pinned Solana toolchain, not each example.
-- Treat public-input order as an API. A change must update the circuit, program calldata, witness
-  generator, E2E instruction builder, README reference, and expected input count together.
-- Keep private witness values out of command-line arguments. Generate a mode-`0600` temporary file
-  and use `xark prove --inputs`.
-- Regenerate `e2e/src/poseidon2.rs`, the Merkle zero table, and both on-chain empty-root constants if
-  their pinned upstream definitions change.
+- One source per fact. Commitments, nullifiers, roots and paths are computed by the circuits' own
+  Rust: the client tests call it through the generated clients, and the demo proofs through the
+  crate. Don't reimplement them in TypeScript or in a program. The client tests check the
+  programs' empty-root constants against the circuits' `Path.first().treeRoot()`.
+- The generated clients are committed so readers see them; `just check-clients` fails if one is
+  stale. Rebuild (`just build`) and commit the result with the circuit change.
+- Treat public-input order as an API: it's each circuit's public statement struct (`Append`,
+  `Withdrawal`, `Transaction`). A change updates the struct, the program's `public_inputs`, and the
+  README reference together.
+- Each example is its own project (its `package.json`, `tsconfig.json`, `vitest.config.ts` and
+  `client/harness.ts`), so one can be copied out alone. The harnesses repeat on purpose; keep
+  each to what its example uses.
+- Programs build with `cargo build-sbf --arch v3`. The generated verifier crates take
+  `xark-verifier` with its default `static-syscalls` feature, which only a v3 program loads; a v0
+  build of it fails with "Relative jump out of bounds".
 - Preserve the explicit dev-key warnings. Production ceremony artifacts do not belong in example
   pull requests.
 

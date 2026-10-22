@@ -1,29 +1,33 @@
-# shielded-pool — two circuits (deposit, withdraw) + one Anchor program.
-# Witness values come from the native wallet helpers in ../e2e (`pool-witness`),
-# which mirror the circuits' Poseidon2 exactly (KAT-pinned). See ../RUNBOOK.md.
+# shielded-pool: two circuits (deposit, withdraw) → dev keys → verifier crates →
+# TS clients → one Anchor program. Prerequisites: ../RUNBOOK.md. The root
+# `just test` runs client/ against the program.
 
-set shell := ["bash", "-uc"]
+set shell := ["bash", "-euo", "pipefail", "-c"]
 
-# Prove + export the DEPOSIT circuit (index-0 demo deposit).
-prove-deposit:
-    xark build circuits/deposit
-    xark inspect circuits/deposit
-    xark setup circuits/deposit
-    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; (cd ../e2e && cargo run -q --locked --bin pool-witness -- deposit) > "$tmp"; xark prove circuits/deposit --inputs "$tmp"
-    xark export circuits/deposit --allow-insecure --crate-name shielded-pool-deposit-xark-verifier
+build: xark (circuit "deposit" "shielded-pool-deposit-xark-verifier") (circuit "withdraw" "shielded-pool-withdraw-xark-verifier")
+    cd program && cargo build-sbf --arch v3
 
-# Prove + export the WITHDRAW circuit (spends the index-0 note).
-prove-withdraw:
-    xark build circuits/withdraw
-    xark inspect circuits/withdraw
-    xark setup circuits/withdraw
-    @tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT; (cd ../e2e && cargo run -q --locked --bin pool-witness -- withdraw) > "$tmp"; xark prove circuits/withdraw --inputs "$tmp"
-    xark export circuits/withdraw --allow-insecure --crate-name shielded-pool-withdraw-xark-verifier
+# One circuit: build, DEV keys (never deploy them, see ../RUNBOOK.md), a proof of
+# its demo inputs as the verifier crate's self-test, the verifier crate, the client.
+circuit name crate:
+    xark build circuits/{{name}}
+    xark setup circuits/{{name}} --insecure-dev-mode --r1cs-form reduced
+    cd circuits/{{name}} && cargo run -q --release --example demo
+    xark export circuits/{{name}} --allow-insecure --crate-name {{crate}}
+    xark client circuits/{{name}} --out client/
 
-# Build the Anchor program (run prove-deposit AND prove-withdraw first — they
-# generate the two verifier crates the program depends on).
-build-program:
-    cd program && cargo build-sbf
+# The circuits' own tests, and the tree's.
+test-circuit:
+    cd circuits/pool && cargo test --release
+    xark test circuits/deposit
+    xark test circuits/withdraw
+
+xark:
+    @xark --version | grep -q '^xark 0\.3\.' || { echo "needs xark 0.3: see ../RUNBOOK.md" >&2; exit 1; }
+
+# Build, then prove with the client and verify on-chain (LiteSVM). `npm install` first.
+test: build
+    npm test
 
 clean:
-    rm -rf circuits/deposit/target circuits/withdraw/target circuits/merkle/target program/target program/.anchor
+    rm -rf circuits/*/target program/target program/.anchor

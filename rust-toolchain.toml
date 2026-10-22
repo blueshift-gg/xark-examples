@@ -1,6 +1,6 @@
-# Host-side builds, formatting, linting, and LiteSVM tests use this exact stable
-# toolchain. xark invokes its own pinned nightly; cargo-build-sbf invokes its
-# pinned Solana platform toolchain.
+# Circuits, host tests, formatting and linting use this stable toolchain (xark
+# needs 1.89 or later and compiles the same circuit on every version);
+# cargo-build-sbf brings its own Solana platform toolchain.
 [toolchain]
 channel = "1.95.0"
 profile = "minimal"

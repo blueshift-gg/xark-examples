@@ -20,44 +20,45 @@ jobs:
         with:
           path: xark-examples
 
-      # Until 0.2.2 is released, examples deliberately dogfood the sibling
-      # checkout through relative path dependencies.
-      - name: Check out local Xark source
+      # Until xark 0.3.0 is released, the examples build against a sibling checkout
+      # (see RUNBOOK.md). Move to the release when it ships.
+      - name: Check out xark
         uses: actions/checkout@v4
         with:
           repository: blueshift-gg/xark
-          # Temporary cross-repository dogfood pin. Move back to `master` when
-          # blueshift-gg/xark#29 merges; use the release after 0.2.2 ships.
-          ref: codex/xark-0.2.2-dogfood
+          ref: remove-nightly-compiler
           path: xark
 
-      - name: Install Rust tooling
-        run: |
-          rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt
-          rustup toolchain install nightly-2026-05-03 --profile minimal --component rust-src --component rustc-dev --component llvm-tools
-          cargo install just --version 1.43.1 --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-      - name: Install local Xark
+      - name: Install tools
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt --target wasm32-unknown-unknown
+          cargo install just --version 1.43.1 --locked
+          cargo install wasm-pack --version 0.15.0 --locked
+          cargo install cargo-build-sbf --version 4.2.0 --locked
+
+      - name: Install xark and xark-wasm from the checkout
         run: |
           cargo install --path ../xark/crates/cli --locked
-          cargo +nightly-2026-05-03 install --path ../xark/crates/rustc --locked
-          xark --version | grep -E '^xark 0\.2\.2 \([0-9a-f]{12}\)$'
-
-      - name: Install pinned Solana program builder
-        run: |
-          cargo install cargo-build-sbf --version 4.0.0 --locked
+          wasm-pack build ../xark/crates/wasm --target nodejs --release --out-dir dist/node
+          xark --version | grep -E '^xark 0\.3\.0 '
+          npm ci
           xark doctor
 
       - name: Formatting
         run: just fmt-check
 
-      - name: Circuit checks and tests
-        run: |
-          just check-circuits
-          just test-circuits
+      - name: Circuit tests
+        run: just test-circuits
 
-      - name: Full proof and LiteSVM suite
+      - name: Build, then prove with the clients and verify on-chain (LiteSVM)
         run: just test
 
       - name: Clippy
         run: just clippy
+
+      - name: Committed clients are current
+        run: just check-clients

@@ -29,22 +29,18 @@ Two phases:
 The example justfiles run:
 
 ```bash
-xark setup <circuit-dir>
+xark setup <circuit-dir> --insecure-dev-mode --r1cs-form reduced
 ```
 
-With no `.ptau` transcript available, xark falls back to a single-party OS-random dev setup and
-marks its metadata `production_safe = false`. This is fine for local testing and **unsafe for
+`--insecure-dev-mode` asks for a single-party OS-random dev setup, and xark marks its metadata
+`production_safe = false`. (`--r1cs-form reduced` picks the R1CS form the provers stream from the circuit
+itself.) This is fine for local testing and **unsafe for
 anything holding value** because there is no ceremony transcript or independent contribution.
 `xark export` refuses these keys unless the caller explicitly passes `--allow-insecure`.
 
-For a real deployment, xark runs an actual phase-2 ceremony:
-
-```bash
-xark ceremony ...
-```
-
-with Schnorr proofs-of-knowledge and δ-consistency pairing checks so each contribution is
-verifiable. This is one of the places xark does real work where prototype tooling just hands
+For a real deployment, xark runs an actual phase-2 ceremony (`xark ceremony init`, `contribute`,
+`verify`, `finalize`; [docs/ceremony.md](../ceremony.md) walks one through on example 01), with
+Schnorr proofs-of-knowledge and δ-consistency pairing checks so each contribution is verifiable. This is one of the places xark does real work where prototype tooling just hands
 you dev keys — see xark's `docs/trusted-setup.md`.
 
 ## The one rule

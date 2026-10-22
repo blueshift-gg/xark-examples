@@ -23,18 +23,18 @@ Every example follows the same loop:
 
 ```
   Rust circuit          ordinary Rust using typed Private/Public inputs and require* constraints
-     | xark build       rustc -> MIR -> xark-IR -> R1CS
+     | xark build       stable rustc -> wasm -> xark-IR -> R1CS
      v
-  circuit + R1CS       compact circuit.xbc (`--emit-json` only for expanded IR)
-     | xark setup / prove --inputs ...
+  circuit + keys       circuit.xbc; xark setup makes the Groth16 keys
+     | xark export      a Rust verifier crate, the verifying key baked in
+     | xark client      a typed TypeScript client
      v
-  proof + verifier     a 256-byte Groth16 proof; xark export emits a Rust verifier crate
-     |
+  app (TypeScript)     prover.prove(inputs) -> a 256-byte proof, sent in a transaction
      v
-  Solana program       verify_instruction_data(...) through native alt_bn128 syscalls
+  Solana program       verify(proof, public inputs) through native alt_bn128 syscalls
 ```
 
-xark owns the complete circuit toolchain: Rust subset checking, MIR lowering, R1CS generation,
-witness solving, Groth16 setup/proving, and verifier export. The application still owns the
+xark owns the complete circuit toolchain: Rust subset checking, lowering to R1CS, witness solving,
+Groth16 setup and proving (in Rust and in wasm), verifier export, and client generation. The application still owns the
 public/private contract, wallet-side witness data, trusted-setup ceremony, and on-chain state
 transition around the generated verifier.

@@ -15,5 +15,5 @@ url = "https://api.apr.dev"
 cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
-# Tests live in the workspace's e2e/ crate (LiteSVM): `cd ../../e2e && cargo test`.
+# Tests: ../client/shielded-transfer.test.ts, against this program in LiteSVM (`just test` at the root).
 [scripts]

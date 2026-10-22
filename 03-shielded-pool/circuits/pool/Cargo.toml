@@ -1,0 +1,19 @@
+# What the pool's circuits share, and 04's: an ordinary Rust library, compiled
+# into each circuit like xark's own gadget crates.
+[package]
+name = "pool"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[dependencies]
+xark = { path = "../../../../xark/crates/lang", version = "0.3.0" }
+xark-merkle = { path = "../../../../xark/gadgets/xark-merkle", version = "0.3.0" }
+xark-poseidon = { path = "../../../../xark/gadgets/xark-poseidon", version = "0.3.0" }
+xark-hash = { path = "../../../../xark/gadgets/xark-hash", version = "0.3.0" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

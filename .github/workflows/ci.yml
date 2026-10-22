@@ -36,6 +36,8 @@ jobs:
       - name: Install tools
         run: |
           rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt --target wasm32-unknown-unknown
+          # xark has no toolchain file: wasm-pack builds xark-wasm with the default stable.
+          rustup target add wasm32-unknown-unknown --toolchain stable
           cargo install just --version 1.43.1 --locked
           cargo install wasm-pack --version 0.15.0 --locked
           cargo install cargo-build-sbf --version 4.2.0 --locked
@@ -51,11 +53,11 @@ jobs:
       - name: Formatting
         run: just fmt-check
 
-      - name: Circuit tests
-        run: just test-circuits
-
       - name: Build, then prove with the clients and verify on-chain (LiteSVM)
         run: just test
+
+      - name: Circuit tests
+        run: just test-circuits
 
       - name: Clippy
         run: just clippy

@@ -23,6 +23,7 @@ check-clients: build
     git diff --exit-code -- '*/client/'
     test -z "$(git status --porcelain -- '*/client/')"
 
+# After `build`, which generates the verifier crates the programs' manifests name.
 fmt-check:
     for m in $(git ls-files '*Cargo.toml'); do cargo fmt --check --manifest-path $m; done
 

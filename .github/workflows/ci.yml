@@ -50,11 +50,12 @@ jobs:
           npm ci
           xark doctor
 
-      - name: Formatting
-        run: just fmt-check
-
       - name: Build, then prove with the clients and verify on-chain (LiteSVM)
         run: just test
+
+      # After the build: the programs' manifests name the generated verifier crates.
+      - name: Formatting
+        run: just fmt-check
 
       - name: Circuit tests
         run: just test-circuits

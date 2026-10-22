@@ -55,13 +55,17 @@ jobs:
 
       # After the build: the programs' manifests name the generated verifier crates.
       - name: Formatting
+        if: ${{ !cancelled() }} # each check reports on its own
         run: just fmt-check
 
       - name: Circuit tests
+        if: ${{ !cancelled() }} # each check reports on its own
         run: just test-circuits
 
       - name: Clippy
+        if: ${{ !cancelled() }} # each check reports on its own
         run: just clippy
 
       - name: Committed clients are current
+        if: ${{ !cancelled() }} # each check reports on its own
         run: just check-clients

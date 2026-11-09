@@ -20,15 +20,6 @@ jobs:
         with:
           path: xark-examples
 
-      # Until xark 0.3.0 is released, the examples build against a sibling checkout
-      # of xark master at this commit (see RUNBOOK.md). Move to the release when it ships.
-      - name: Check out xark
-        uses: actions/checkout@v4
-        with:
-          repository: blueshift-gg/xark
-          ref: master
-          path: xark
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -36,17 +27,13 @@ jobs:
       - name: Install tools
         run: |
           rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt --target wasm32-unknown-unknown
-          # xark has no toolchain file: wasm-pack builds @blueshift-gg/xark with the default stable.
-          rustup target add wasm32-unknown-unknown --toolchain stable
           cargo install just --version 1.43.1 --locked
-          cargo install wasm-pack --version 0.15.0 --locked
           cargo install cargo-build-sbf --version 4.2.0 --locked
 
-      - name: Install xark and @blueshift-gg/xark from the checkout
+      - name: Install xark 0.3 and the npm packages
         run: |
-          cargo install --path ../xark/crates/cli --locked
-          wasm-pack build ../xark/crates/wasm --target nodejs --release --out-dir dist/node
-          xark --version | grep -E '^xark 0\.3\.0 '
+          cargo install xark-cli --version 0.3.0 --locked
+          xark --version | grep -E '^xark 0\.3\.'
           npm ci
           xark doctor
 

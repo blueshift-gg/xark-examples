@@ -525,6 +525,8 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "xark-verifier"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20afcc210f41a1b9681c46466a246592b0cc6a351e70edb1888236209bcbec7e"
 dependencies = [
  "solana-nostd-alt-bn128",
  "solana-program-error",

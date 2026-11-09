@@ -18,7 +18,7 @@ pinocchio = "0.11"
 # Host tests check the program's dates against the circuit's own.
 [dev-dependencies]
 age_verification = { path = "../circuit" }
-xark = { path = "../../../xark/crates/lang", version = "0.3.0" }
+xark = "0.3"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
@@ -34,7 +34,3 @@ panic = "abort"
 strip = "symbols"
 overflow-checks = false
 
-# Until xark 0.3.0 is on crates.io: the generated verifier crate pins
-# `xark-verifier = "=0.3.0"`, served here by the sibling xark checkout.
-[patch.crates-io]
-xark-verifier = { path = "../../../xark/crates/verifier" }

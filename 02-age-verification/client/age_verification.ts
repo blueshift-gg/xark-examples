@@ -176,7 +176,7 @@ export const AgeVerification = new Circuit<AgeVerificationInputs, AgeVerificatio
   schema,
   decodePublic,
   client: true,
-  digest: "c29b631da921fba8ebd44f4f46147c61",
+  digest: "2a22ef5bb15f7f63ebab6fcc8522d877",
 });
 
 export type AgeVerificationProver = Prover<AgeVerificationInputs, AgeVerificationPublicInputs, AgeVerificationPublicValues, AgeVerificationStructs>;

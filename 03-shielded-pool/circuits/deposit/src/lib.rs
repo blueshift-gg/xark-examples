@@ -1,36 +1,75 @@
-//! Shielded pool — DEPOSIT circuit. Proves `new_root` is the correct result of
-//! appending `leaf` at `index` to the tree rooted at `old_root` — so the Solana
-//! program never hashes (all Poseidon lives in the circuits, keeping circuit
-//! and chain consistent by construction). The private `filled_subtrees`
-//! frontier is pinned by the `old_root` check. Public inputs, in order:
-//! old_root, new_root, leaf, index. (Design walkthrough in the README.)
-#![no_std]
-
-use pool_merkle::{root_with_leaf, zeros, H, ZERO_LEAF};
+//! Shielded pool: the DEPOSIT circuit. Proves the program's tree with `leaf`
+//! appended at its next index has root `new_root`, so the program can advance its
+//! tree without hashing: all hashing is in the circuits.
+use pool::Path;
 use xark::prelude::*;
 
-pub fn circuit(
-    filled_subtrees: Private<[Field; H]>,
-    old_root: Public<Field>,
-    new_root: Public<Field>,
-    leaf: Public<Field>,
-    index: Public<Field>,
-) {
-    // The low H bits of `index` drive the path; `to_bits` range-checks
-    // index < 2^H, so a high index cannot silently alias a low slot.
-    let index_bits = index.to_bits::<H>();
-    let z = zeros();
+/// What the program checks a deposit against: its tree's root and next index, the
+/// leaf, and the root once the leaf is appended. The public inputs, in this order.
+#[input]
+pub struct Append {
+    pub old_root: Field,
+    pub new_root: Field,
+    pub leaf: Field,
+    pub index: u32,
+}
 
-    // 1. Bind the private frontier to the chain's current root. Only the true
-    //    frontier reproduces `old_root` (collision resistance of Poseidon2).
-    assert_eq(
-        root_with_leaf(Field::from(ZERO_LEAF), index_bits, filled_subtrees, z),
-        old_root,
-    );
+#[input]
+impl Append {
+    /// `leaf` appended at `path`, the next free leaf's path.
+    pub fn of(path: Path, leaf: Field) -> Append {
+        Append {
+            old_root: path.tree_root(),
+            new_root: path.root(leaf),
+            leaf,
+            index: path.index,
+        }
+    }
+}
 
-    // 2. Prove `new_root` = the same tree with `leaf` inserted at `index`.
-    assert_eq(
-        root_with_leaf(leaf, index_bits, filled_subtrees, z),
-        new_root,
-    );
+/// `path` is the next free leaf's. Only the tree's true nodes reproduce the
+/// program's root (Poseidon's collision resistance), so the path is the true path,
+/// and `new_root` is the program's tree with `leaf` in the next slot.
+#[circuit]
+pub fn shielded_pool_deposit(path: Private<Path>, append: Public<Append>) {
+    require_eq(Append::of(path, append.leaf), append);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn appends_to_the_tree() {
+        let tip = Path::first().next(Field::from(7u64));
+        let leaf = Field::from(8u64);
+        let append = Append::of(tip, leaf);
+        shielded_pool_deposit(tip, append).unwrap();
+        // Another index, another tree, another leaf: each is refused.
+        assert!(shielded_pool_deposit(tip, Append { index: 2, ..append }).is_err());
+        let empty = Path::first().tree_root();
+        assert!(
+            shielded_pool_deposit(
+                tip,
+                Append {
+                    old_root: empty,
+                    ..append
+                }
+            )
+            .is_err()
+        );
+        let other = Field::from(9u64);
+        assert!(
+            shielded_pool_deposit(
+                tip,
+                Append {
+                    leaf: other,
+                    ..append
+                }
+            )
+            .is_err()
+        );
+        // The first slot again, over the leaf already there.
+        assert!(shielded_pool_deposit(Path::first(), Append { index: 0, ..append }).is_err());
+    }
 }

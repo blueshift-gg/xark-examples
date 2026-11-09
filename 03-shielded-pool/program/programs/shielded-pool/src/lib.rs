@@ -8,33 +8,33 @@
 //!   deposit   "new_root extends the current tree by one leaf"  → store new_root
 //!   withdraw  "I own some leaf, here is its nullifier"          → pay out once
 //!
-//! Verifier calldata is the 256-byte proof followed by the circuit's public
-//! inputs, each a 32-byte little-endian field element, in declaration order.
+//! Each proof is checked against public inputs the program assembles itself,
+//! 32-byte little-endian field elements in the circuit's order, so a proof only
+//! holds for the state and accounts of the transaction carrying it.
 //!
 //! Reference implementation — unaudited, educational. See the README.
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
 use shielded_pool_deposit_xark_verifier as deposit_verifier;
-use shielded_pool_withdraw_xark_verifier as withdraw_verifier;
+use shielded_pool_deposit_xark_verifier::Proof;
+use shielded_pool_withdraw_xark_verifier as withdraw_verifier; // the same type in both verifier crates
 
 // Placeholder program id — replace with yours via `anchor keys sync`.
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 const TREE_HEIGHT: u32 = 20;
 const ROOT_HISTORY_SIZE: usize = 16;
-const PROOF_LEN: usize = 256;
 
 const POOL_SEED: &[u8] = b"pool";
 const NULLIFIER_SEED: &[u8] = b"nullifier";
 
-// Root of an all-empty height-TREE_HEIGHT tree (zeros[H]), little-endian — the
-// deposit circuit's `old_root` for the first deposit. Fixed on-chain so the pool
-// can't be seeded with a wrong root. Regenerate if TREE_HEIGHT or the hash
-// changes: `cargo run --bin pool-witness -- zeros` (e2e crate).
+// The empty tree's root, little-endian: the first deposit's `old_root`. Fixed
+// here so a pool can't be seeded with another; the client tests check it against
+// the circuit's `Path.first().treeRoot()`.
 const EMPTY_ROOT: [u8; 32] = [
-    251, 142, 67, 247, 199, 111, 241, 124, 245, 96, 180, 214, 179, 51, 248, 149, 20, 177, 173, 83,
-    193, 126, 124, 38, 168, 0, 139, 11, 55, 225, 46, 3,
+    26, 122, 47, 146, 164, 115, 191, 166, 88, 234, 28, 252, 38, 169, 221, 171, 246, 159, 204, 103,
+    2, 229, 199, 103, 212, 104, 254, 41, 151, 59, 127, 46,
 ];
 
 #[program]
@@ -61,21 +61,23 @@ pub mod shielded_pool {
         ctx: Context<Deposit>,
         commitment: [u8; 32],
         new_root: [u8; 32],
-        proof: Vec<u8>,
+        proof: [u8; 256],
     ) -> Result<()> {
         let pool = &ctx.accounts.pool;
-        require!(proof.len() == PROOF_LEN, PoolError::BadProofLen);
         require!(
             (pool.next_index as u64) < (1u64 << TREE_HEIGHT),
             PoolError::TreeFull
         );
 
-        // Public inputs in the deposit circuit's order.
-        let old_root = pool.current_root();
-        let index = field_from_u64(pool.next_index as u64);
-        let calldata = verifier_calldata(&proof, &[old_root, new_root, commitment, index]);
+        // The deposit circuit's public `Append`, field by field.
+        let public_inputs = [
+            pool.current_root(),
+            new_root,
+            commitment,
+            field_from_u64(pool.next_index as u64),
+        ];
         require!(
-            deposit_verifier::verify_instruction_data(&calldata),
+            deposit_verifier::verify(&Proof::from_le_bytes(&proof), &public_inputs),
             PoolError::InvalidProof
         );
 
@@ -109,35 +111,30 @@ pub mod shielded_pool {
     /// relayer must check `fee` covers its costs off-chain before submitting.
     pub fn withdraw(
         ctx: Context<Withdraw>,
-        proof: Vec<u8>,
+        proof: [u8; 256],
         root: [u8; 32],
         nullifier_hash: [u8; 32],
         fee: u64,
     ) -> Result<()> {
         let pool = &ctx.accounts.pool;
-        require!(proof.len() == PROOF_LEN, PoolError::BadProofLen);
         require!(fee <= pool.denomination, PoolError::FeeTooHigh);
         require!(pool.knows_root(&root), PoolError::UnknownRoot);
 
-        // Public inputs in the withdraw circuit's order. Pubkeys are wider than
-        // the field, so each enters as two 128-bit halves — split identically
-        // to the circuit.
-        let (r_hi, r_lo) = split_pubkey(&ctx.accounts.recipient.key());
-        let (l_hi, l_lo) = split_pubkey(&ctx.accounts.relayer.key());
-        let calldata = verifier_calldata(
-            &proof,
-            &[
-                root,
-                nullifier_hash,
-                r_hi,
-                r_lo,
-                l_hi,
-                l_lo,
-                field_from_u64(fee),
-            ],
-        );
+        // The withdraw circuit's public `Withdrawal`, field by field. An address is
+        // wider than the field, so it enters as its two halves (`Address`).
+        let [r_hi, r_lo] = address_halves(&ctx.accounts.recipient.key());
+        let [l_hi, l_lo] = address_halves(&ctx.accounts.relayer.key());
+        let public_inputs = [
+            root,
+            nullifier_hash,
+            r_hi,
+            r_lo,
+            l_hi,
+            l_lo,
+            field_from_u64(fee),
+        ];
         require!(
-            withdraw_verifier::verify_instruction_data(&calldata),
+            withdraw_verifier::verify(&Proof::from_le_bytes(&proof), &public_inputs),
             PoolError::InvalidProof
         );
 
@@ -182,7 +179,7 @@ pub struct Deposit<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(proof: Vec<u8>, root: [u8; 32], nullifier_hash: [u8; 32])]
+#[instruction(proof: [u8; 256], root: [u8; 32], nullifier_hash: [u8; 32])]
 pub struct Withdraw<'info> {
     #[account(mut, seeds = [POOL_SEED, pool.denomination.to_le_bytes().as_ref()], bump = pool.bump)]
     pub pool: Box<Account<'info, Pool>>,
@@ -245,8 +242,6 @@ pub struct DepositEvent {
 
 #[error_code]
 pub enum PoolError {
-    #[msg("proof must be 256 bytes")]
-    BadProofLen,
     #[msg("invalid proof")]
     InvalidProof,
     #[msg("unknown or stale merkle root")]
@@ -257,17 +252,7 @@ pub enum PoolError {
     TreeFull,
 }
 
-// ---- verifier plumbing ---------------------------------------------------------
-
-/// proof ‖ public inputs — the exact byte string the generated verifier checks.
-fn verifier_calldata(proof: &[u8], public_inputs: &[[u8; 32]]) -> Vec<u8> {
-    let mut data = Vec::with_capacity(proof.len() + 32 * public_inputs.len());
-    data.extend_from_slice(proof);
-    for input in public_inputs {
-        data.extend_from_slice(input);
-    }
-    data
-}
+// ---- public inputs -------------------------------------------------------------
 
 /// A u64 as a 32-byte little-endian field element.
 fn field_from_u64(x: u64) -> [u8; 32] {
@@ -276,13 +261,15 @@ fn field_from_u64(x: u64) -> [u8; 32] {
     out
 }
 
-/// Split a 32-byte pubkey into two 128-bit field elements:
-/// `lo` = bytes[0..16], `hi` = bytes[16..32]. The circuit range-checks both.
-fn split_pubkey(pk: &Pubkey) -> ([u8; 32], [u8; 32]) {
-    let b = pk.to_bytes();
-    let mut hi = [0u8; 32];
-    let mut lo = [0u8; 32];
-    lo[..16].copy_from_slice(&b[..16]);
-    hi[..16].copy_from_slice(&b[16..32]);
-    (hi, lo)
+/// An address as the circuit's `Address`: `[hi, lo]`, each 16-byte half read as a
+/// big-endian integer, as 32-byte little-endian field elements.
+fn address_halves(address: &Pubkey) -> [[u8; 32]; 2] {
+    let bytes = address.to_bytes();
+    let half = |b: &[u8]| {
+        let mut out = [0u8; 32];
+        out[..16].copy_from_slice(b);
+        out[..16].reverse();
+        out
+    };
+    [half(&bytes[..16]), half(&bytes[16..])]
 }

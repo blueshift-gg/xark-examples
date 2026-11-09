@@ -6,12 +6,14 @@ path from this repository to designing a private Solana application.
 ## The path
 
 **Step 1 - Run example 01.**
-Build a Rust range circuit, create a proof, export its verifier, and execute it in LiteSVM. The goal
-is to understand the build -> setup -> prove -> export -> on-chain loop.
+Build a Rust range circuit, export its verifier, prove with its generated TypeScript client, and
+verify on-chain in LiteSVM. The goal is to understand the build -> setup -> export -> client ->
+on-chain loop.
 
 **Step 2 - Learn xark's Rust circuit subset.**
-Start with `Private<Field>`, `Public<Field>`, sized comparisons, arrays, fixed loops, and assertions.
-Use `xark check` continuously: an unsupported Rust construct should be redesigned, not worked around.
+Start with `Private<Field>`, `Public<Field>`, `#[input]` structs, sized comparisons, arrays, fixed loops,
+and `require*`. Use `xark check` continuously: an unsupported Rust construct should be redesigned,
+not worked around.
 
 **Step 3 - Build with commitments.**
 [Example 02](../../02-age-verification/) turns a bare range proof into a claim about a specific
@@ -44,8 +46,6 @@ around them.
   trusted setup, and security documentation.
 - The [Rust reference](https://doc.rust-lang.org/reference/) for the source language; remember that
   xark deliberately accepts only a sound circuit subset.
-- The [snarkjs repository](https://github.com/iden3/snarkjs) for an independent Groth16 artifact
-  consumer. xark emits snarkjs-compatible proof and verification-key JSON.
 - Vitalik Buterin's *Zk-SNARKs: Under the Hood* or Maksym Petkus's *Why and How zk-SNARK Works* for
   the underlying intuition.
 

@@ -7,5 +7,7 @@ overflow-checks = true
 lto = "fat"
 codegen-units = 1
 
-[patch."https://github.com/blueshift-gg/xark"]
-xark-verifier = { path = "../../vendor/xark-verifier" }
+# Until xark 0.3.0 is on crates.io: the generated verifier crates pin
+# `xark-verifier = "=0.3.0"`, served here by the sibling xark checkout.
+[patch.crates-io]
+xark-verifier = { path = "../../../xark/crates/verifier" }

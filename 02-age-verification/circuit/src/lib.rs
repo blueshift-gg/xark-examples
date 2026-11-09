@@ -1,94 +1,105 @@
-//! Prove age ≥ 18 against a public commitment to a birth year, revealing
-//! neither the year nor the nonce. Public: commitment, current_year (this
-//! order — the program packs instruction data to match). Private: birth_year,
-//! nonce. (Trust model + walkthrough in the README.)
-#![cfg_attr(not(test), no_std)]
-
+//! Prove you're 18 or older against an issuer's commitment to your birth date,
+//! revealing neither the date nor anything else. Public inputs, in order:
+//! `commitment`, `policy`, `holder`. The program builds `policy` from its clock and
+//! `holder` from the transaction's signer, so a proof made for another day, or by
+//! another wallet, doesn't verify.
 use xark::prelude::*;
-use xark_poseidon2::hash2;
+use xark_hash::Hash;
 
-pub fn circuit(
-    birth_year: Private<Field>,
-    nonce: Private<Field>,
+/// A calendar day from 1900 through 2100: in the circuit, its count of days since
+/// 1900-01-01, 17 bits.
+pub type Date = Days<1900, 2100>;
+
+/// What an issuer attests about a holder, committed to as a whole with Poseidon2.
+#[input]
+pub struct Identity {
+    pub born: Date,
+    /// The issuer's random blinding secret: it hides the commitment.
+    pub salt: Field,
+}
+
+#[input]
+impl Identity {
+    /// The issuer's commitment: what a verifier sees of the holder, and all it sees.
+    pub fn commitment(&self) -> Field {
+        xark_poseidon2::hash(self.to_fields())
+    }
+}
+
+/// What a verifier requires: born on or before `born_by`.
+#[input]
+pub struct Policy {
+    pub born_by: Date,
+}
+
+#[input]
+impl Policy {
+    /// 18 or older on `today`: born on or before the same day 18 years earlier.
+    #[cfg(not(xark))]
+    pub fn adult_on(today: impl Into<Date>) -> Policy {
+        Policy {
+            born_by: today.into().years_before(18),
+        }
+    }
+}
+
+/// `holder` is the wallet the proof is for: a Solana address, 32 bytes, as xark's
+/// `Hash`. Nothing else uses it, so `bind` ties the proof to it with one constraint
+/// per half (Tornado's `recipientSquare`): Groth16 checks a public input only
+/// through the constraints that use it. Without it, anyone who saw the proof could
+/// submit it as their own.
+#[circuit]
+pub fn age_verification(
+    id: Private<Identity>,
     commitment: Public<Field>,
-    current_year: Public<Field>,
+    policy: Public<Policy>,
+    holder: Public<Hash>,
 ) {
-    // 1. Prove we know the opening of the published commitment. `hash2` is the
-    //    same Poseidon2 gadget the client hashes with — params match forever.
-    assert_eq(hash2(birth_year, nonce), commitment);
-
-    // 2. Prove adulthood. The explicit `::<32>` width range-checks both years
-    //    to 32 bits, so the subtraction below cannot wrap the field; `18u32`
-    //    then bounds the age the same way.
-    assert(current_year.ge::<32>(birth_year));
-    let age = current_year - birth_year;
-    assert(age >= 18u32);
+    require_eq(id.commitment(), commitment);
+    require(id.born <= policy.born_by);
+    bind(holder);
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use super::*;
 
-    use xark_ir::VarId;
-
-    /// Prove with decimal-string inputs (commitments don't fit the i128-typed
-    /// `#[circuit]` test struct). Loads the artifacts `xark build` wrote.
-    fn prove(inputs: &[(&str, &str)]) -> bool {
-        let dir = std::path::Path::new("target/xark/age_verification");
-        let read = |f: &str| {
-            std::fs::read_to_string(dir.join(f))
-                .unwrap_or_else(|_| panic!("run `xark build` first (missing {f})"))
-        };
-        let prim = xark_ir::primitive::from_json(&read("circuit.json")).unwrap();
-        let r1cs = xark_ir::json::from_json(&read("r1cs.json")).unwrap();
-        let ids: BTreeMap<&str, VarId> =
-            prim.vars.iter().map(|v| (v.name.as_str(), v.id)).collect();
-        let inputs: BTreeMap<VarId, String> = inputs
-            .iter()
-            .map(|(name, val)| (ids[name], val.to_string()))
-            .collect();
-        xark_prover::prove_and_verify(&r1cs, &prim, &inputs).unwrap_or(false)
+    fn holder(born: &str) -> Identity {
+        Identity {
+            born: born.into(),
+            salt: Field::from_le_bytes(&[0x2a; 31]),
+        }
     }
 
-    // Poseidon2(birth_year, nonce) for the two test years — computed with the
-    // repo's native mirror of the gadget (`cargo run --bin commit`, e2e crate).
-    const NONCE: &str =
-        "13102783505849749806854498441424493672889223651541975554449217606361432761234";
-    const COMMIT_1990: &str =
-        "16270599866198939632822375879477475677301143667419388581635073777919968987292";
-    const COMMIT_2020: &str =
-        "13573765523911323905052498488738541803332695318708852347910960062058857884122";
+    const HOLDER: [u8; 32] = [7; 32];
 
-    #[test]
-    fn adult_passes() {
-        // 2026 - 1990 = 36 ≥ 18
-        assert!(prove(&[
-            ("birth_year", "1990"),
-            ("nonce", NONCE),
-            ("commitment", COMMIT_1990),
-            ("current_year", "2026"),
-        ]));
+    fn check(id: Identity, today: &str) -> Result<(), xark::prover::ProveError> {
+        age_verification(id, id.commitment(), Policy::adult_on(today), HOLDER)
     }
 
     #[test]
-    fn minor_fails() {
-        // 2026 - 2020 = 6 < 18 → the age assert must fail (commitment is valid)
-        assert!(!prove(&[
-            ("birth_year", "2020"),
-            ("nonce", NONCE),
-            ("commitment", COMMIT_2020),
-            ("current_year", "2026"),
-        ]));
+    fn an_adult_passes() {
+        check(holder("1990-01-01"), "2026-10-22").unwrap();
+        // 18 today.
+        check(holder("2008-10-22"), "2026-10-22").unwrap();
     }
 
     #[test]
-    fn wrong_opening_fails() {
-        // A commitment that doesn't match (birth_year, nonce) must be rejected.
-        assert!(!prove(&[
-            ("birth_year", "1990"),
-            ("nonce", NONCE),
-            ("commitment", COMMIT_2020),
-            ("current_year", "2026"),
-        ]));
+    fn a_minor_fails() {
+        // 18 tomorrow.
+        assert!(check(holder("2008-10-23"), "2026-10-22").is_err());
+        // Born on 29 February: 18 on 1 March in a common year.
+        assert!(check(holder("2008-02-29"), "2026-02-28").is_err());
+        check(holder("2008-02-29"), "2026-03-01").unwrap();
+        // Checked on 29 February: 18 years earlier has no 29th, so the 28th.
+        check(holder("2010-02-28"), "2028-02-29").unwrap();
+        assert!(check(holder("2010-03-01"), "2028-02-29").is_err());
+    }
+
+    #[test]
+    fn another_identity_fails() {
+        let id = holder("1990-01-01");
+        let other = holder("1990-01-02").commitment();
+        assert!(age_verification(id, other, Policy::adult_on("2026-10-22"), HOLDER).is_err());
     }
 }

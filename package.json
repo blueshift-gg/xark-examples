@@ -1,0 +1,13 @@
+{
+  "name": "xark-examples",
+  "private": true,
+  "workspaces": [
+    "01-over-9000",
+    "02-age-verification",
+    "03-shielded-pool",
+    "04-shielded-transfer"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces"
+  }
+}

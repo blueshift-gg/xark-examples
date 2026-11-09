@@ -1,16 +1,17 @@
-# Shielded pool — withdraw circuit crate (Rust → R1CS via xark).
+# The shielded pool's withdraw circuit: an ordinary Rust crate xark compiles to R1CS.
 [package]
 name = "shielded_pool_withdraw"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+license = "MIT"
 publish = false
 
 [workspace]
 
-[lib]
-path = "src/lib.rs"
-
 [dependencies]
-xark = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03", default-features = false }
-xark-poseidon2 = { git = "https://github.com/blueshift-gg/xark", rev = "44f9a8d3b1f5af90a57249fa1dad308968922a03" }
-pool-merkle = { path = "../merkle" }
+xark = { path = "../../../../xark/crates/lang", version = "0.3.0" }
+xark-poseidon2 = { path = "../../../../xark/gadgets/xark-poseidon2", version = "0.3.0" }
+pool = { path = "../pool" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

@@ -29,27 +29,26 @@ Two phases:
 The example justfiles run:
 
 ```bash
-xark setup <circuit-dir>
+xark setup <circuit-dir> --insecure-dev-mode --r1cs-form reduced
 ```
 
-With no `.ptau` transcript available, xark falls back to a single-party OS-random dev setup and
-marks its metadata `production_safe = false`. This is fine for local testing and **unsafe for
-anything holding value** because there is no ceremony transcript or independent contribution.
-`xark export` refuses these keys unless the caller explicitly passes `--allow-insecure`.
+`--insecure-dev-mode` asks for a single-party setup from the machine's randomness. (`--r1cs-form
+reduced` picks the R1CS form the provers stream from the circuit itself.) It's sound unless whoever
+ran it kept that randomness, which xark never writes down, but everyone relying on the verifier has
+to trust that one party, and there's no transcript to show them. `xark export` records how a key was
+made in the verifier crate's `SETUP` constant: `single-party` here, `ceremony` for two or more
+contributors, and `seeded` for a test key made with `--deterministic-rng`, which anyone with the seed
+can forge proofs for.
 
-For a real deployment, xark runs an actual phase-2 ceremony:
-
-```bash
-xark ceremony ...
-```
-
-with Schnorr proofs-of-knowledge and δ-consistency pairing checks so each contribution is
-verifiable. This is one of the places xark does real work where prototype tooling just hands
-you dev keys — see xark's `docs/trusted-setup.md`.
+For a real deployment, xark runs an actual phase-2 ceremony (`xark ceremony init`, `contribute`,
+`verify`, `finalize`; [docs/ceremony.md](../ceremony.md) walks one through on example 01), with
+Schnorr proofs-of-knowledge and δ-consistency pairing checks so each contribution is verifiable. One
+honest contributor is enough, so no single party has to be trusted — see xark's
+`docs/trusted-setup.md`.
 
 ## The one rule
 
-> **Never deploy a circuit with dev-mode keys.** Use keys from a ceremony
-> you trust. If you can't point to the ceremony, treat the proofs as forgeable.
+> **Know whom your key asks users to trust.** A single-party key asks them to trust whoever ran
+> setup; for anything holding value, use keys from a ceremony. Never deploy a seeded key.
 
 Next: [your ZK journey — where to go from here →](./05-your-zk-journey.md)

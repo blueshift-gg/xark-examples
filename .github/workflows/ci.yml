@@ -21,12 +21,12 @@ jobs:
           path: xark-examples
 
       # Until xark 0.3.0 is released, the examples build against a sibling checkout
-      # (see RUNBOOK.md). Move to the release when it ships.
+      # of xark master at this commit (see RUNBOOK.md). Move to the release when it ships.
       - name: Check out xark
         uses: actions/checkout@v4
         with:
           repository: blueshift-gg/xark
-          ref: remove-nightly-compiler
+          ref: f5548b792fb429209edae66e12680ca6ec637365
           path: xark
 
       - uses: actions/setup-node@v4
@@ -36,13 +36,13 @@ jobs:
       - name: Install tools
         run: |
           rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt --target wasm32-unknown-unknown
-          # xark has no toolchain file: wasm-pack builds xark-wasm with the default stable.
+          # xark has no toolchain file: wasm-pack builds @blueshift-gg/xark with the default stable.
           rustup target add wasm32-unknown-unknown --toolchain stable
           cargo install just --version 1.43.1 --locked
           cargo install wasm-pack --version 0.15.0 --locked
           cargo install cargo-build-sbf --version 4.2.0 --locked
 
-      - name: Install xark and xark-wasm from the checkout
+      - name: Install xark and @blueshift-gg/xark from the checkout
         run: |
           cargo install --path ../xark/crates/cli --locked
           wasm-pack build ../xark/crates/wasm --target nodejs --release --out-dir dist/node

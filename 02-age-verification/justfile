@@ -1,4 +1,4 @@
-# age-verification: circuit → dev keys → verifier crate → TS client → program.
+# age-verification: circuit → keys → verifier crate → TS client → program.
 # Prerequisites: ../RUNBOOK.md. The root `just test` runs client/ against the program.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
@@ -6,11 +6,11 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 build:
     @xark --version | grep -q '^xark 0\.3\.' || { echo "needs xark 0.3: see ../RUNBOOK.md" >&2; exit 1; }
     xark build circuit
-    # DEV keys from local randomness: never deploy them (see ../RUNBOOK.md).
+    # A single-party key from this machine's randomness (see ../RUNBOOK.md).
     xark setup circuit --insecure-dev-mode --r1cs-form reduced
     # The verifier crate's self-test vector: a proof of examples/demo.rs.
     cd circuit && cargo run -q --release --example demo
-    xark export circuit --allow-insecure --crate-name age-verification-xark-verifier
+    xark export circuit --crate-name age-verification-xark-verifier
     xark client circuit --out client/
     cd program && cargo build-sbf --arch v3
 

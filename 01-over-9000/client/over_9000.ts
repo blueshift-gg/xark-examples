@@ -7,12 +7,29 @@
 // and `xark client` turns them into the types below. Don't edit this file: change
 // the circuit, then rebuild and rerun `xark client`. Values go in their natural
 // forms (dates, strings, variant names, bytes); xark-wasm encodes them against the
-// schema (in `over_9000.schema.ts`, written with this file), exactly as `xark prove
+// schema (at the end of the imports), exactly as `xark prove
 // --inputs` does.
 
-import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type Json, type Proof, type Prover, type U64, type Verifier } from "@blueshift-gg/xark-wasm/client";
-import schema from "./over_9000.schema";
+import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type Json, type Proof, type Prover, type U64, type Verifier } from "@blueshift-gg/xark/client";
 export { CheckFailed, Field, InputError, fromHex, toHex };
+
+// The circuit's schema.json.
+const schema = {
+  "circuit": "over_9000",
+  "inputs": [
+    {
+      "name": "power_level",
+      "type": {
+        "uint": 64
+      },
+      "visibility": "private"
+    }
+  ],
+  "public_inputs": [],
+  "types": {},
+  "version": 2,
+  "xark": "0.3.0"
+};
 
 /** Every input of `over_9000`. */
 export interface Over9000Inputs {
@@ -44,7 +61,7 @@ export const Over9000 = new Circuit<Over9000Inputs, Over9000PublicInputs, Over90
   schema,
   decodePublic,
   client: false,
-  digest: "d25dc370f531f4f9f78650cfd3a0629e",
+  digest: "4816ee24881c12772e0ef0b08f3c8578",
 });
 
 export type Over9000Prover = Prover<Over9000Inputs, Over9000PublicInputs, Over9000PublicValues, {}>;

@@ -15,8 +15,8 @@ import {
   type Instruction,
   type KeyPairSigner,
 } from "@solana/kit";
-import * as xark from "@blueshift-gg/xark-wasm";
-import { createPool } from "@blueshift-gg/xark-wasm/pool";
+import * as xark from "@blueshift-gg/xark";
+import { createPool } from "@blueshift-gg/xark/pool";
 import { FailedTransactionMetadata, LiteSVM, type TransactionMetadata } from "litesvm";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -39,11 +39,11 @@ export function artifacts(crate: string, name: string) {
 }
 
 /**
- * xark-wasm proving across a pool of worker threads: pass `{ wasm }` to a client's
+ * xark proving across a pool of worker threads: pass `{ wasm }` to a client's
  * `prover`, and `terminate` when done. The same proofs and errors, about 4× faster
  * on 8 threads for 04's circuit. `proveStreaming` streams the constraint rows from
  * `circuit.xbc`, so the keys are made `--r1cs-form reduced` (the justfiles do). In a browser the
- * pool needs a cross-origin-isolated page; see xark-wasm's README.
+ * pool needs a cross-origin-isolated page; see `@blueshift-gg/xark`'s README.
  */
 export async function pooled(threads = 8) {
   const pool = await createPool({ threads });

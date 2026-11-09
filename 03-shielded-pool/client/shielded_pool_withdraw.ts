@@ -7,12 +7,132 @@
 // and `xark client` turns them into the types below. Don't edit this file: change
 // the circuit, then rebuild and rerun `xark client`. Values go in their natural
 // forms (dates, strings, variant names, bytes); xark-wasm encodes them against the
-// schema (in `shielded_pool_withdraw.schema.ts`, written with this file), exactly as `xark prove
+// schema (at the end of the imports), exactly as `xark prove
 // --inputs` does.
 
-import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type FieldInput, type Json, type Proof, type Prover, type U32, type U64, type Verifier } from "@blueshift-gg/xark-wasm/client";
-import schema from "./shielded_pool_withdraw.schema";
+import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type FieldInput, type Json, type Proof, type Prover, type U32, type U64, type Verifier } from "@blueshift-gg/xark/client";
 export { CheckFailed, Field, InputError, fromHex, toHex };
+
+// The circuit's schema.json.
+const schema = {
+  "circuit": "shielded_pool_withdraw",
+  "inputs": [
+    {
+      "name": "note",
+      "type": {
+        "ref": "Note"
+      },
+      "visibility": "private"
+    },
+    {
+      "name": "path",
+      "type": {
+        "ref": "Path"
+      },
+      "visibility": "private"
+    },
+    {
+      "name": "withdrawal",
+      "type": {
+        "ref": "Withdrawal"
+      },
+      "visibility": "public"
+    }
+  ],
+  "public_inputs": [
+    "withdrawal.root",
+    "withdrawal.nullifier_hash",
+    "withdrawal.recipient.hi",
+    "withdrawal.recipient.lo",
+    "withdrawal.relayer.hi",
+    "withdrawal.relayer.lo",
+    "withdrawal.fee"
+  ],
+  "types": {
+    "Hash": {
+      "encoding": {
+        "bytes": 32,
+        "concat": [
+          16,
+          16
+        ]
+      },
+      "struct": [
+        {
+          "name": "hi",
+          "type": "field"
+        },
+        {
+          "name": "lo",
+          "type": "field"
+        }
+      ]
+    },
+    "Note": {
+      "struct": [
+        {
+          "name": "nullifier",
+          "type": "field"
+        },
+        {
+          "name": "secret",
+          "type": "field"
+        }
+      ]
+    },
+    "Path": {
+      "struct": [
+        {
+          "name": "index",
+          "type": {
+            "uint": 32
+          }
+        },
+        {
+          "name": "siblings",
+          "type": {
+            "array": {
+              "len": 20,
+              "of": "field"
+            }
+          }
+        }
+      ]
+    },
+    "Withdrawal": {
+      "struct": [
+        {
+          "name": "root",
+          "type": "field"
+        },
+        {
+          "name": "nullifier_hash",
+          "type": "field"
+        },
+        {
+          "name": "recipient",
+          "type": {
+            "ref": "Hash"
+          }
+        },
+        {
+          "name": "relayer",
+          "type": {
+            "ref": "Hash"
+          }
+        },
+        {
+          "name": "fee",
+          "type": {
+            "uint": 64
+          }
+        }
+      ]
+    }
+  },
+  "version": 2,
+  "xark": "0.3.0"
+};
 
 /** A `Note` (an input struct). */
 export interface Note {
@@ -134,7 +254,7 @@ export const ShieldedPoolWithdraw = new Circuit<ShieldedPoolWithdrawInputs, Shie
   schema,
   decodePublic,
   client: true,
-  digest: "6f8f471b8160e99e950356494d008a81",
+  digest: "5bfbf4d76ed90e8aa38b9bd0ea431e5d",
 });
 
 export type ShieldedPoolWithdrawProver = Prover<ShieldedPoolWithdrawInputs, ShieldedPoolWithdrawPublicInputs, ShieldedPoolWithdrawPublicValues, ShieldedPoolWithdrawStructs>;

@@ -38,7 +38,7 @@ fn process_instruction(
     if !holder.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
-    let born_by = field(adult_born_by(yyyymmdd(Clock::get()?.unix_timestamp)));
+    let born_by = field(born_by(Clock::get()?.unix_timestamp));
     let [holder_hi, holder_lo] = halves(holder.address().as_array());
     let public_inputs = [commitment, born_by, holder_hi, holder_lo];
     if verify(&Proof::from_le_bytes(proof), &public_inputs) {
@@ -67,25 +67,24 @@ fn field(x: u32) -> [u8; 32] {
     out
 }
 
-/// The latest birth date of someone 18 on `today` (both `YYYYMMDD`): the circuit's
-/// `Policy::adult_on(today).born_by`, which is xark's `Date::years_before(18)`. The
-/// same day 18 years earlier, or the 28th for a 29 February that year doesn't have.
-fn adult_born_by(today: u32) -> u32 {
-    let (year, month, day) = (today / 10_000 - 18, today / 100 % 100, today % 100);
-    let leap = (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400);
-    let day = if month == 2 && day == 29 && !leap {
-        28
-    } else {
-        day
-    };
-    year * 10_000 + month * 100 + day
+/// The circuit's `Policy::adult_on(today).born_by` for the day holding the Unix time
+/// `unix`, as the circuit's `Date` (`Days<1900, 2100>`) holds it: days since
+/// 1900-01-01. That's the latest birth date of someone 18 that day: the same day 18
+/// years earlier, or the 28th for a 29 February that year doesn't have, as xark's
+/// `years_before` does.
+fn born_by(unix: i64) -> u32 {
+    let (y, m, d) = civil_from_days(unix.div_euclid(86_400));
+    let y = y - 18;
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let d = if m == 2 && d == 29 && !leap { 28 } else { d };
+    (days_from_civil(y, m, d) - days_from_civil(1900, 1, 1)) as u32
 }
 
-/// The UTC day of a Unix time as the circuit's `Date`, the integer `YYYYMMDD`.
-/// Howard Hinnant's `civil_from_days`, from "chrono-Compatible Low-Level Date
-/// Algorithms" (http://howardhinnant.github.io/date_algorithms.html).
-fn yyyymmdd(unix: i64) -> u32 {
-    let z = unix.div_euclid(86_400) + 719_468;
+/// The civil date of a day count from 1970-01-01 (UTC). Howard Hinnant's
+/// `civil_from_days`, from "chrono-Compatible Low-Level Date Algorithms"
+/// (http://howardhinnant.github.io/date_algorithms.html).
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
+    let z = z + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097; // [0, 146096]
     let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
@@ -93,70 +92,51 @@ fn yyyymmdd(unix: i64) -> u32 {
     let mp = (5 * doy + 2) / 153; // [0, 11], from March
     let day = doy - (153 * mp + 2) / 5 + 1;
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    (year * 10_000 + month * 100 + day) as u32
+    (yoe + era * 400 + i64::from(month <= 2), month, day)
+}
+
+/// The day count from 1970-01-01 of a civil date: Hinnant's `days_from_civil`, the
+/// inverse of [`civil_from_days`].
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400; // [0, 399]
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146_097 + doe - 719_468
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{adult_born_by, yyyymmdd};
-    use age_verification::Policy;
-    use xark::Date;
+    use super::{born_by, civil_from_days, days_from_civil};
+    use age_verification::{Date, Policy};
 
-    /// For every day from 1900 to 2200, the program's `born_by` is the circuit's.
+    /// For every day from 1918 (the first whose `born_by` is in the circuit's range)
+    /// to 2100, the program's `born_by` is the circuit's.
     #[test]
     fn born_by_is_the_circuits() {
-        let start = -2_208_988_800; // 1900-01-01
-        for n in 0..(300 * 366) {
-            let today = yyyymmdd(start + n * 86_400);
-            let (y, m, d) = (today / 10_000, today / 100 % 100, today % 100);
-            let date = Date::new(y as u16, m as u8, d as u8);
-            let (by, bm, bd) = Policy::adult_on(date).born_by.parts();
-            let want = u32::from(by) * 10_000 + u32::from(bm) * 100 + u32::from(bd);
-            assert_eq!(adult_born_by(today), want, "on {today}");
+        let start = days_from_civil(1918, 1, 1) * 86_400;
+        let end = days_from_civil(2101, 1, 1) * 86_400;
+        for unix in (start..end).step_by(86_400) {
+            let today = Date::from_unix(unix).unwrap();
+            let want = Policy::adult_on(today).born_by.steps();
+            assert_eq!(u64::from(born_by(unix)), want, "on {:?}", today.date());
+            // Any moment of the day is that day.
+            assert_eq!(born_by(unix + 86_399), born_by(unix));
         }
     }
 
     /// Anchors from Python's `datetime(y, m, d, tzinfo=timezone.utc).timestamp()`.
     #[test]
     fn days_are_calendar_days() {
-        assert_eq!(yyyymmdd(0), 19700101);
-        assert_eq!(yyyymmdd(86_399), 19700101);
-        assert_eq!(yyyymmdd(-1), 19691231);
-        assert_eq!(yyyymmdd(951_868_800), 20000301);
-        assert_eq!(yyyymmdd(1_709_164_800), 20240229);
-        assert_eq!(yyyymmdd(1_792_627_200), 20261022);
-    }
-
-    /// Consecutive days from 1900 to 2200 step through the calendar one day at a
-    /// time: the day goes up by one, or it's the first of the next month (with the
-    /// last day of the month it left right for leap years), or of the next year.
-    #[test]
-    fn every_day_follows_the_one_before() {
-        let parts = |d: u32| (d / 10_000, d / 100 % 100, d % 100);
-        let leap =
-            |y: u32| (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-        let last = |y: u32, m: u32| match m {
-            2 if leap(y) => 29,
-            2 => 28,
-            4 | 6 | 9 | 11 => 30,
-            _ => 31,
-        };
-        let start = -2_208_988_800; // 1900-01-01
-        let mut prev = parts(yyyymmdd(start));
-        assert_eq!(prev, (1900, 1, 1));
-        for n in 1..(300 * 366) {
-            let (y, m, d) = parts(yyyymmdd(start + n * 86_400));
-            let (py, pm, pd) = prev;
-            let next = if pd < last(py, pm) {
-                (py, pm, pd + 1)
-            } else if pm < 12 {
-                (py, pm + 1, 1)
-            } else {
-                (py + 1, 1, 1)
-            };
-            assert_eq!((y, m, d), next);
-            prev = (y, m, d);
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(-1), (1969, 12, 31));
+        assert_eq!(civil_from_days(951_868_800 / 86_400), (2000, 3, 1));
+        assert_eq!(civil_from_days(1_709_164_800 / 86_400), (2024, 2, 29));
+        assert_eq!(civil_from_days(1_792_627_200 / 86_400), (2026, 10, 22));
+        for z in -30_000..100_000 {
+            let (y, m, d) = civil_from_days(z);
+            assert_eq!(days_from_civil(y, m, d), z);
         }
     }
 }

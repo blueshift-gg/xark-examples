@@ -6,6 +6,10 @@
 use xark::prelude::*;
 use xark_hash::Hash;
 
+/// A calendar day from 1900 through 2100: in the circuit, its count of days since
+/// 1900-01-01, 17 bits.
+pub type Date = Days<1900, 2100>;
+
 /// What an issuer attests about a holder, committed to as a whole with Poseidon2.
 #[input]
 pub struct Identity {
@@ -40,10 +44,10 @@ impl Policy {
 }
 
 /// `holder` is the wallet the proof is for: a Solana address, 32 bytes, as xark's
-/// `Hash`. Nothing else uses it, so it's bound with one constraint per half (Tornado's
-/// `recipientSquare`): Groth16 checks a public input only through the constraints
-/// that use it, and `xark build` refuses one that none do. Without it, anyone who
-/// saw the proof could submit it as their own.
+/// `Hash`. Nothing else uses it, so `bind` ties the proof to it with one constraint
+/// per half (Tornado's `recipientSquare`): Groth16 checks a public input only
+/// through the constraints that use it. Without it, anyone who saw the proof could
+/// submit it as their own.
 #[circuit]
 pub fn age_verification(
     id: Private<Identity>,
@@ -53,11 +57,7 @@ pub fn age_verification(
 ) {
     require_eq(id.commitment(), commitment);
     require(id.born <= policy.born_by);
-    let mut halves = [Field::from(0u64); 2];
-    xark::input::write_fields(&holder, &mut halves);
-    for half in halves {
-        let _ = half * half;
-    }
+    bind(holder);
 }
 
 #[cfg(test)]

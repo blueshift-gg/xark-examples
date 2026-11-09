@@ -93,9 +93,7 @@ pub mod shielded_transfer {
             pool.current_root(),
             new_root,
             field_from_u64(pool.next_index as u64),
-            field_from_u64(vpub_in),
-            field_from_u64(vpub_out),
-            field_from_u64(fee),
+            flow(vpub_in, vpub_out, fee),
             recipient_hi,
             recipient_lo,
             relayer_hi,
@@ -303,6 +301,16 @@ pub enum PoolError {
 fn field_from_u64(x: u64) -> [u8; 32] {
     let mut out = [0u8; 32];
     out[..8].copy_from_slice(&x.to_le_bytes());
+    out
+}
+
+/// `Flow`'s three amounts as the circuit packs them, into one field element in
+/// declaration order: `vpub_in + vpub_out·2⁶⁴ + fee·2¹²⁸`, little-endian.
+fn flow(vpub_in: u64, vpub_out: u64, fee: u64) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out[..8].copy_from_slice(&vpub_in.to_le_bytes());
+    out[8..16].copy_from_slice(&vpub_out.to_le_bytes());
+    out[16..24].copy_from_slice(&fee.to_le_bytes());
     out
 }
 

@@ -1,4 +1,4 @@
-# shielded-pool: two circuits (deposit, withdraw) → dev keys → verifier crates →
+# shielded-pool: two circuits (deposit, withdraw) → keys → verifier crates →
 # TS clients → one Anchor program. Prerequisites: ../RUNBOOK.md. The root
 # `just test` runs client/ against the program.
 
@@ -7,13 +7,13 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 build: xark (circuit "deposit" "shielded-pool-deposit-xark-verifier") (circuit "withdraw" "shielded-pool-withdraw-xark-verifier")
     cd program && cargo build-sbf --arch v3
 
-# One circuit: build, DEV keys (never deploy them, see ../RUNBOOK.md), a proof of
+# One circuit: build, a single-party key (see ../RUNBOOK.md), a proof of
 # its demo inputs as the verifier crate's self-test, the verifier crate, the client.
 circuit name crate:
     xark build circuits/{{name}}
     xark setup circuits/{{name}} --insecure-dev-mode --r1cs-form reduced
     cd circuits/{{name}} && cargo run -q --release --example demo
-    xark export circuits/{{name}} --allow-insecure --crate-name {{crate}}
+    xark export circuits/{{name}} --crate-name {{crate}}
     xark client circuits/{{name}} --out client/
 
 # The circuits' own tests, and the tree's.

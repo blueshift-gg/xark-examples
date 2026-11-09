@@ -7,22 +7,121 @@
 // and `xark client` turns them into the types below. Don't edit this file: change
 // the circuit, then rebuild and rerun `xark client`. Values go in their natural
 // forms (dates, strings, variant names, bytes); xark-wasm encodes them against the
-// schema (in `age_verification.schema.ts`, written with this file), exactly as `xark prove
+// schema (at the end of the imports), exactly as `xark prove
 // --inputs` does.
 
-import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type Day, type FieldInput, type Json, type Proof, type Prover, type Verifier } from "@blueshift-gg/xark-wasm/client";
-import schema from "./age_verification.schema";
+import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type FieldInput, type Json, type Proof, type Prover, type Verifier } from "@blueshift-gg/xark/client";
 export { CheckFailed, Field, InputError, fromHex, toHex };
+
+// The circuit's schema.json.
+const schema = {
+  "circuit": "age_verification",
+  "inputs": [
+    {
+      "name": "id",
+      "type": {
+        "ref": "Identity"
+      },
+      "visibility": "private"
+    },
+    {
+      "name": "commitment",
+      "type": "field",
+      "visibility": "public"
+    },
+    {
+      "name": "policy",
+      "type": {
+        "ref": "Policy"
+      },
+      "visibility": "public"
+    },
+    {
+      "name": "holder",
+      "type": {
+        "ref": "Hash"
+      },
+      "visibility": "public"
+    }
+  ],
+  "public_inputs": [
+    "commitment",
+    "policy.born_by",
+    "holder.hi",
+    "holder.lo"
+  ],
+  "types": {
+    "Days<1900,2100>": {
+      "encoding": {
+        "time": {
+          "from": 1900,
+          "to": 2100,
+          "unit": 86400
+        }
+      },
+      "newtype": {
+        "uint": 17
+      }
+    },
+    "Hash": {
+      "encoding": {
+        "bytes": 32,
+        "concat": [
+          16,
+          16
+        ]
+      },
+      "struct": [
+        {
+          "name": "hi",
+          "type": "field"
+        },
+        {
+          "name": "lo",
+          "type": "field"
+        }
+      ]
+    },
+    "Identity": {
+      "struct": [
+        {
+          "name": "born",
+          "type": {
+            "ref": "Days<1900,2100>"
+          }
+        },
+        {
+          "name": "salt",
+          "type": "field"
+        }
+      ]
+    },
+    "Policy": {
+      "struct": [
+        {
+          "name": "born_by",
+          "type": {
+            "ref": "Days<1900,2100>"
+          }
+        }
+      ]
+    }
+  },
+  "version": 2,
+  "xark": "0.3.0"
+};
 
 /** An `Identity` (an input struct). */
 export interface Identity {
-  born: Day;
+  /** A day from 1900-01-01 to 2100-12-31 (UTC); a moment in a day counts as that day. */
+  born: Date;
   salt: FieldInput;
 }
 
 /** A `Policy` (an input struct). */
 export interface Policy {
-  bornBy: Day;
+  /** A day from 1900-01-01 to 2100-12-31 (UTC); a moment in a day counts as that day. */
+  bornBy: Date;
 }
 
 /** Every input of `age_verification`. */
@@ -44,7 +143,7 @@ export interface AgeVerificationPublicInputs {
 
 /** A `Policy`, decoded. */
 export interface PolicyValue {
-  bornBy: Day;
+  bornBy: Date;
 }
 
 /** The public inputs, decoded from a proof. */
@@ -77,7 +176,7 @@ export const AgeVerification = new Circuit<AgeVerificationInputs, AgeVerificatio
   schema,
   decodePublic,
   client: true,
-  digest: "4c784f0ca262e3aa5cbeddd02e1c923e",
+  digest: "c29b631da921fba8ebd44f4f46147c61",
 });
 
 export type AgeVerificationProver = Prover<AgeVerificationInputs, AgeVerificationPublicInputs, AgeVerificationPublicValues, AgeVerificationStructs>;
@@ -89,7 +188,7 @@ export const Policy = {
   /**
    * 18 or older on `today`: born on or before the same day 18 years earlier.
    */
-  adultOn(today: Day): PolicyValue {
+  adultOn(today: Date): PolicyValue {
     return decodePolicy(AgeVerification.call<Json<PolicyValue>>("Policy.adult_on", [today]));
   },
 };

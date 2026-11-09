@@ -7,12 +7,289 @@
 // and `xark client` turns them into the types below. Don't edit this file: change
 // the circuit, then rebuild and rerun `xark client`. Values go in their natural
 // forms (dates, strings, variant names, bytes); xark-wasm encodes them against the
-// schema (in `shielded_transact.schema.ts`, written with this file), exactly as `xark prove
+// schema (at the end of the imports), exactly as `xark prove
 // --inputs` does.
 
-import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type FieldInput, type Json, type Proof, type Prover, type U32, type U64, type Verifier } from "@blueshift-gg/xark-wasm/client";
-import schema from "./shielded_transact.schema";
+import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type FieldInput, type Json, type Proof, type Prover, type U32, type U64, type Verifier } from "@blueshift-gg/xark/client";
 export { CheckFailed, Field, InputError, fromHex, toHex };
+
+// The circuit's schema.json.
+const schema = {
+  "circuit": "shielded_transact",
+  "inputs": [
+    {
+      "name": "key",
+      "type": {
+        "ref": "Key"
+      },
+      "visibility": "private"
+    },
+    {
+      "name": "spends",
+      "type": {
+        "array": {
+          "len": 2,
+          "of": {
+            "ref": "Spend"
+          }
+        }
+      },
+      "visibility": "private"
+    },
+    {
+      "name": "outputs",
+      "type": {
+        "array": {
+          "len": 2,
+          "of": {
+            "ref": "Note"
+          }
+        }
+      },
+      "visibility": "private"
+    },
+    {
+      "name": "tip",
+      "type": {
+        "ref": "Path"
+      },
+      "visibility": "private"
+    },
+    {
+      "name": "tx",
+      "type": {
+        "ref": "Transaction"
+      },
+      "visibility": "public"
+    }
+  ],
+  "public_inputs": [
+    "tx.root",
+    "tx.asset.hi",
+    "tx.asset.lo",
+    "tx.nullifiers[0]",
+    "tx.nullifiers[1]",
+    "tx.commitments[0]",
+    "tx.commitments[1]",
+    "tx.old_root",
+    "tx.new_root",
+    "tx.index",
+    "tx.flow.{vpub_in,vpub_out,fee}",
+    "tx.flow.recipient.hi",
+    "tx.flow.recipient.lo",
+    "tx.flow.relayer.hi",
+    "tx.flow.relayer.lo",
+    "tx.memos[0].hi",
+    "tx.memos[0].lo",
+    "tx.memos[1].hi",
+    "tx.memos[1].lo"
+  ],
+  "types": {
+    "Flow": {
+      "struct": [
+        {
+          "name": "vpub_in",
+          "packed": {
+            "bits": 64,
+            "offset": 0
+          },
+          "type": {
+            "uint": 64
+          }
+        },
+        {
+          "name": "vpub_out",
+          "packed": {
+            "bits": 64,
+            "offset": 64
+          },
+          "type": {
+            "uint": 64
+          }
+        },
+        {
+          "name": "fee",
+          "packed": {
+            "bits": 64,
+            "offset": 128
+          },
+          "type": {
+            "uint": 64
+          }
+        },
+        {
+          "name": "recipient",
+          "type": {
+            "ref": "Hash"
+          }
+        },
+        {
+          "name": "relayer",
+          "type": {
+            "ref": "Hash"
+          }
+        }
+      ]
+    },
+    "Hash": {
+      "encoding": {
+        "bytes": 32,
+        "concat": [
+          16,
+          16
+        ]
+      },
+      "struct": [
+        {
+          "name": "hi",
+          "type": "field"
+        },
+        {
+          "name": "lo",
+          "type": "field"
+        }
+      ]
+    },
+    "Key": {
+      "struct": [
+        {
+          "name": "secret",
+          "type": "field"
+        }
+      ]
+    },
+    "Note": {
+      "struct": [
+        {
+          "name": "value",
+          "type": {
+            "uint": 64
+          }
+        },
+        {
+          "name": "owner",
+          "type": "field"
+        },
+        {
+          "name": "rho",
+          "type": "field"
+        },
+        {
+          "name": "rseed",
+          "type": "field"
+        }
+      ]
+    },
+    "Path": {
+      "struct": [
+        {
+          "name": "index",
+          "type": {
+            "uint": 32
+          }
+        },
+        {
+          "name": "siblings",
+          "type": {
+            "array": {
+              "len": 20,
+              "of": "field"
+            }
+          }
+        }
+      ]
+    },
+    "Spend": {
+      "struct": [
+        {
+          "name": "note",
+          "type": {
+            "ref": "Note"
+          }
+        },
+        {
+          "name": "diversifier",
+          "type": "field"
+        },
+        {
+          "name": "path",
+          "type": {
+            "ref": "Path"
+          }
+        },
+        {
+          "name": "real",
+          "type": "bool"
+        }
+      ]
+    },
+    "Transaction": {
+      "struct": [
+        {
+          "name": "root",
+          "type": "field"
+        },
+        {
+          "name": "asset",
+          "type": {
+            "ref": "Hash"
+          }
+        },
+        {
+          "name": "nullifiers",
+          "type": {
+            "array": {
+              "len": 2,
+              "of": "field"
+            }
+          }
+        },
+        {
+          "name": "commitments",
+          "type": {
+            "array": {
+              "len": 2,
+              "of": "field"
+            }
+          }
+        },
+        {
+          "name": "old_root",
+          "type": "field"
+        },
+        {
+          "name": "new_root",
+          "type": "field"
+        },
+        {
+          "name": "index",
+          "type": {
+            "uint": 32
+          }
+        },
+        {
+          "name": "flow",
+          "type": {
+            "ref": "Flow"
+          }
+        },
+        {
+          "name": "memos",
+          "type": {
+            "array": {
+              "len": 2,
+              "of": {
+                "ref": "Hash"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "version": 2,
+  "xark": "0.3.0"
+};
 
 /** A `Flow` (an input struct). */
 export interface Flow {
@@ -181,7 +458,7 @@ export const ShieldedTransact = new Circuit<ShieldedTransactInputs, ShieldedTran
   schema,
   decodePublic,
   client: true,
-  digest: "44ceb132dce5c7ed2f4ef019e9721254",
+  digest: "aa2e05477c68d7d50002397448d32796",
 });
 
 export type ShieldedTransactProver = Prover<ShieldedTransactInputs, ShieldedTransactPublicInputs, ShieldedTransactPublicValues, ShieldedTransactStructs>;

@@ -1,4 +1,4 @@
-# shielded-transfer: the transact circuit → dev keys → verifier crate → TS client
+# shielded-transfer: the transact circuit → keys → verifier crate → TS client
 # → one Anchor + SPL program. Prerequisites: ../RUNBOOK.md. The root `just test`
 # runs client/ against the program.
 
@@ -7,11 +7,11 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 build:
     @xark --version | grep -q '^xark 0\.3\.' || { echo "needs xark 0.3: see ../RUNBOOK.md" >&2; exit 1; }
     xark build circuits/transact
-    # DEV keys from local randomness: never deploy them (see ../RUNBOOK.md).
+    # A single-party key from this machine's randomness (see ../RUNBOOK.md).
     xark setup circuits/transact --insecure-dev-mode --r1cs-form reduced
     # The verifier crate's self-test vector: a proof of examples/demo.rs.
     cd circuits/transact && cargo run -q --release --example demo
-    xark export circuits/transact --allow-insecure --crate-name shielded-transfer-transact-xark-verifier
+    xark export circuits/transact --crate-name shielded-transfer-transact-xark-verifier
     xark client circuits/transact --out client/
     cd program && cargo build-sbf --arch v3
 

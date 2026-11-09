@@ -12,7 +12,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-age_verification_xark_verifier = { path = "../circuit/target/xark/age_verification/verifier", package = "age-verification-xark-verifier" }
+age_verification_xark_verifier = { path = "../circuit/age_verification-verifier", package = "age-verification-xark-verifier" }
 pinocchio = "0.11"
 
 # Host tests check the program's dates against the circuit's own.

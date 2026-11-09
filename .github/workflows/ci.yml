@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: blueshift-gg/xark
-          ref: f5548b792fb429209edae66e12680ca6ec637365
+          ref: master
           path: xark
 
       - uses: actions/setup-node@v4

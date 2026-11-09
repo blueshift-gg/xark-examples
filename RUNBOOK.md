@@ -9,7 +9,7 @@ The reproducible build and deployment path. If a command here disagrees with an 
 |------|---------|---------|
 | Rust | stable, `1.95.0` pinned | installed from `rust-toolchain.toml` (xark needs 1.89+) |
 | xark CLI and crates | `0.3.0` (sibling checkout) | below |
-| `@blueshift-gg/xark-wasm` | `0.3.0` (sibling checkout) | below |
+| `@blueshift-gg/xark` | `0.3.0` (sibling checkout) | below |
 | `wasm-pack` | `0.15.0` | `cargo install wasm-pack --version 0.15.0 --locked` |
 | `cargo-build-sbf` | `4.2.0` | `cargo install cargo-build-sbf --version 4.2.0 --locked` |
 | Node | 22+ | [nodejs.org](https://nodejs.org) |
@@ -18,10 +18,10 @@ The reproducible build and deployment path. If a command here disagrees with an 
 
 No nightly Rust: xark 0.3 compiles circuits with your stable toolchain.
 
-Until xark 0.3.0 is published, keep `xark` (on its `remove-nightly-compiler` branch) and
+Until xark 0.3.0 is published, keep `xark` (at the master commit CI's `ref` names) and
 `xark-examples` as sibling checkouts. The circuit crates depend on it by
 `path = ..., version = "0.3.0"`, the programs `[patch]` the generated verifier's `xark-verifier`
-to it, and each example's `package.json` takes xark-wasm from it:
+to it, and each example's `package.json` takes `@blueshift-gg/xark` from it:
 
 ```bash
 cargo install --path ../xark/crates/cli --locked
@@ -48,9 +48,9 @@ Each example's `just build` runs the same steps:
 
 ```bash
 xark build <circuit>                        # Rust → wasm → R1CS: target/xark/<name>/
-xark setup <circuit> --insecure-dev-mode --r1cs-form reduced   # DEV keys (see §5)
+xark setup <circuit> --insecure-dev-mode --r1cs-form reduced   # a single-party key (see §5)
 <prove the demo inputs>                     # the verifier crate's self-test vector
-xark export <circuit> --allow-insecure --crate-name <name>   # the verifier crate
+xark export <circuit> --crate-name <name>   # the verifier crate, beside the circuit's sources
 xark client <circuit> --out client/         # the typed TypeScript client
 cd program && cargo build-sbf --arch v3     # the program, linking the verifier crate
 ```
@@ -80,7 +80,7 @@ just clippy
 just check-clients   # the committed clients are current
 ```
 
-`just test` is the end-to-end test: each example's client proves in node through xark-wasm, and
+`just test` is the end-to-end test: each example's client proves in node through `@blueshift-gg/xark`, and
 the proof goes in a transaction to the example's program in LiteSVM (in-process, with the real
 `alt_bn128` syscalls; no validator or network).
 
@@ -103,9 +103,10 @@ public-input encoding, and the wallet's bookkeeping of notes and paths.
 
 ## 5. Trusted setup
 
-The recipes deliberately use development keys. They are not production-safe and never committed. A
-deployment that can hold value needs a reviewed circuit and an auditable multi-party phase-2
-ceremony: [docs/ceremony.md](./docs/ceremony.md) walks one through on 01's circuit. Preserve the transcript, and pin the
+The recipes make single-party keys from the machine's randomness, and never commit them. Such a key
+is sound unless whoever ran setup kept that randomness, but users of the verifier have to trust that
+one party; the verifier crate's `SETUP` says `single-party`. A deployment that holds value needs a
+reviewed circuit and an auditable multi-party phase-2 ceremony (`SETUP` is then `ceremony`): [docs/ceremony.md](./docs/ceremony.md) walks one through on 01's circuit. Preserve the transcript, and pin the
 client to the circuit and key it was made for: `Circuit.prover(url, { digest })` and
 `Circuit.verifier(vk, { keyHash })`.
 

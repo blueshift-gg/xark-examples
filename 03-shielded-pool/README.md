@@ -6,7 +6,8 @@ This is the first real privacy primitive in the ladder: it combines proofs ([01]
 and commitments ([02](../02-age-verification/)) with Merkle membership and nullifiers.
 
 > **Reference implementation. Unaudited. Educational.** Mixers carry real legal and regulatory weight
-> depending on where you are. Never use dev-mode keys for anything that holds value.
+> depending on where you are. For anything that holds value, use keys from a multi-party
+> ceremony (`xark ceremony`), so no one has to trust whoever ran setup.
 
 ## How it works
 
@@ -117,7 +118,7 @@ program/             Anchor: verify both proofs, hold and pay lamports, track ro
 ## Run it
 
 ```bash
-just build          # both circuits → dev keys → verifier crates → clients → .so
+just build          # both circuits → keys → verifier crates → clients → .so
 just test-circuit   # the tree's tests, then each circuit's
 cd .. && npx vitest run 03
 ```

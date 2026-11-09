@@ -35,7 +35,7 @@ the examples below are that choice made four ways.
 ```
   Rust circuit       you write the rules: what's secret, what's public, what must hold
      │ xark build      stable rustc → wasm → R1CS
-     │ xark setup      Groth16 keys (dev keys here; `xark ceremony` for real ones)
+     │ xark setup      Groth16 keys (single-party here; `xark ceremony` for a multi-party one)
      ├─▶ xark export   a verifier crate, the key baked in ─▶ your Solana program
      └─▶ xark client   a typed TypeScript client
                            │ prover.prove({ ...typed inputs })
@@ -77,15 +77,15 @@ its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
 | Circuit | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | On-chain CU |
 |---|--:|--:|--:|--:|--:|
 | 01 `over_9000` | 128 | 0 | 20 ms | 9 ms | 73,912 |
-| 02 `age_verification` | 325 | 4 | 72 ms | 24 ms | 95,175 |
-| 03 `shielded_pool_deposit` | 9,688 | 4 | 1,635 ms | 403 ms | 101,041 |
-| 03 `shielded_pool_withdraw` | 5,402 | 7 | 920 ms | 180 ms | 117,578 |
-| 04 `shielded_transact` | 26,313 | 21 | 3,736 ms | 896 ms | 190,615–203,471 |
+| 02 `age_verification` | 293 | 4 | 72 ms | 24 ms | 95,668 |
+| 03 `shielded_pool_deposit` | 9,647 | 4 | 1,635 ms | 403 ms | 96,766–97,349 |
+| 03 `shielded_pool_withdraw` | 5,382 | 7 | 920 ms | 180 ms | 119,607 |
+| 04 `shielded_transact` | 26,123 | 19 | 3,736 ms | 896 ms | 178,956–184,956 |
 
 Constraints from `xark inspect`. Proving in node 24 through the generated clients, median of three,
-on an Apple M4 Max; "8 workers" is xark-wasm's worker pool. Compute units are the whole instruction
+on an Apple M4 Max; "8 workers" is `@blueshift-gg/xark`'s worker pool. Compute units are the whole instruction
 in LiteSVM, so 03 and 04 include the accounts they create and the tokens they move. 04 varies with
-its public inputs, past the default 200k limit, so its client asks for 250k. A proof is always 256
+its public inputs, close to the default 200k limit, so its client asks for 250k. A proof is always 256
 bytes.
 
 ## Testing
@@ -113,14 +113,14 @@ stable Rust (one language for circuit, gadgets, wallet logic and program, with r
 diagnostics via `xark check`); a generated TypeScript client that proves and runs the circuit
 crate's own helpers; a real multi-party setup (`xark ceremony`); Lean proofs of its constraint
 rewrites; guard rails that refuse what can't be proved soundly (subset rejection with rustc spans,
-a public input no constraint uses, dev-mode keys blocked from export); `xark profile` to attribute
-every constraint to a source line; and a Pinocchio low-CU verify path.
+a public input no constraint uses); verifier crates that record how their key was made; `xark
+profile` to attribute every constraint to a source line; and a Pinocchio low-CU verify path.
 
 ## Status & safety
 
 > Reference implementations for **learning: unaudited, not for production.** The shielded examples
 > especially are educational; privacy tooling carries real legal weight depending on your
-> jurisdiction. Never ship dev-mode keys; use `xark ceremony` for anything real.
+> jurisdiction. The recipes make single-party keys; use `xark ceremony` for anything real.
 
 ## Resources
 

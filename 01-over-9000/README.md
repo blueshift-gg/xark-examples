@@ -55,7 +55,7 @@ published commitment ([02](../02-age-verification/)) or a Merkle tree of deposit
 ## Run it
 
 ```bash
-just test           # circuit → dev keys → verifier crate → client → .so, then the client test
+just test           # circuit → key → verifier crate → client → .so, then the client test
 just test-circuit   # the circuit's Rust tests: 9001 passes, 9000 doesn't
 ```
 
@@ -64,7 +64,7 @@ Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks the Rust and
 ## Build it yourself, from `xark init`
 
 The same example from nothing, in four steps. Every command below was run as written. (Until xark
-0.3.0 is on crates.io and npm, point `xark` and `@blueshift-gg/xark-wasm` at a checkout, as
+0.3.0 is on crates.io and npm, point `xark` and `@blueshift-gg/xark` at a checkout, as
 [RUNBOOK.md](../RUNBOOK.md) §1 does.)
 
 **1. The circuit.** `xark init` scaffolds a circuit crate, wired for rust-analyzer. Replace its
@@ -73,14 +73,15 @@ The same example from nothing, in four steps. Every command below was run as wri
 ```bash
 xark init over-9000
 xark test over-9000                                    # builds the circuit, runs its tests
-xark prove over-9000 --inputs '{"power_level": 9001}'  # makes a dev key on the first run
+xark prove over-9000 --inputs '{"power_level": 9001}'  # makes the key on the first run
 ```
 
-**2. The verifier and the client.** The verifier crate embeds the verifying key; `xark export`
-refuses a dev key without `--allow-insecure` (a real key comes from a [ceremony](../docs/ceremony.md)).
+**2. The verifier and the client.** The verifier crate embeds the verifying key. The key from step 1
+is a single-party setup from your machine's randomness, and the crate's `SETUP` constant says so;
+for a key no single party has to be trusted for, run a [ceremony](../docs/ceremony.md).
 
 ```bash
-xark export over-9000 --allow-insecure          # over-9000/target/xark/over-9000/verifier/
+xark export over-9000                           # over-9000/over-9000-verifier/
 xark client over-9000 --out app/                # app/over_9000.ts
 ```
 
@@ -91,7 +92,7 @@ xark client over-9000 --out app/                # app/over_9000.ts
 crate-type = ["cdylib"]
 
 [dependencies]
-verifier = { path = "../over-9000/target/xark/over-9000/verifier" }
+over-9000-verifier = { path = "../over-9000/over-9000-verifier" }
 pinocchio = "0.11"
 ```
 
@@ -106,7 +107,7 @@ pinocchio::nostd_panic_handler!();
 pinocchio::no_allocator!();
 
 fn process_instruction(_: &Address, _: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    if data.len() == 256 && verifier::verify_instruction_data(data) {
+    if data.len() == 256 && over_9000_verifier::verify_instruction_data(data) {
         Ok(())
     } else {
         Err(ProgramError::InvalidInstructionData)
@@ -119,7 +120,7 @@ cd program && cargo build-sbf --arch v3         # program/target/deploy/over_900
 ```
 
 **4. The app.** In `app/`: `npm init -y`, `npm pkg set type=module`, `npm install
-@blueshift-gg/xark-wasm @solana/kit litesvm tsx`, and `prove.ts`:
+@blueshift-gg/xark @solana/kit litesvm tsx`, and `prove.ts`:
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -161,7 +162,7 @@ npx tsx prove.ts    # verified on-chain in 74355 CU
 ```
 
 That's the whole loop: change the circuit, rerun steps 1–2 and rebuild, and the client and the
-verifier follow it. This directory's `justfile` runs the same steps, with dev keys from `xark setup`.
+verifier follow it. This directory's `justfile` runs the same steps, with its key from `xark setup`.
 
 ## Layout
 

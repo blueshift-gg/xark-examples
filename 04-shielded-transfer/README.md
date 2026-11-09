@@ -74,9 +74,10 @@ entry, so no sum can wrap the field. The program always appends notes in pairs a
 the second output's path is the first's with the first beside it: two `xark-merkle` roots, before
 and after, prove the whole append.
 
-The public inputs are one `Transaction`: 21 field elements, `root, asset (hi, lo), nullifiers[2],
-commitments[2], old_root, new_root, index, vpub_in, vpub_out, fee, recipient (hi, lo), relayer (hi,
-lo), memos[2] (hi, lo each)`. Addresses (the mint, the token accounts) and memo hashes are all
+The public inputs are one `Transaction`: 19 field elements, `root, asset (hi, lo), nullifiers[2],
+commitments[2], old_root, new_root, index, flow, recipient (hi, lo), relayer (hi, lo), memos[2]
+(hi, lo each)`. `flow` is `Flow`'s three `u64`s packed into one element, as xark packs a struct's
+narrow fields: `vpub_in + vpub_out·2⁶⁴ + fee·2¹²⁸`. Addresses (the mint, the token accounts) and memo hashes are all
 32 bytes, which the circuit takes as xark's `Hash`. The circuit imports 03's `pool` crate for `Path`;
 `xark profile` attributes every constraint to a source line.
 
@@ -105,13 +106,13 @@ the vault; withdrawals and fees transfer out, signed by the pool PDA. A transact
 token accounts it uses: a deposit its source (`user_token`), a withdrawal its destination
 (`recipient_token`), a fee the relayer's (`relayer_token`).
 
-A transact uses 190k to 204k compute units (measured; it varies with the public inputs), around the
-default limit of 200k, so the client asks for 250k with a compute budget instruction.
+A transact uses 179k to 185k compute units (measured; it varies with the public inputs), close to
+the default limit of 200k, so the client asks for 250k with a compute budget instruction.
 
 ## Run it
 
 ```bash
-just build          # circuit → dev keys → verifier crate → client → .so
+just build          # circuit → key → verifier crate → client → .so
 just test-circuit   # deposit, pay privately, and what's refused
 cd .. && npx vitest run 04
 ```
@@ -124,7 +125,7 @@ fails; a second withdrawal of Bob's note is refused; and Mallory can't spend Ali
 client names the failing line, `key.address(spend.diversifier)`. The wallet keeps every note's
 `Path` current as outputs land, with 03's `Path.update`.
 
-It proves across 8 worker threads: [`pooled`](./client/harness.ts) hands the client xark-wasm with
+It proves across 8 worker threads: [`pooled`](./client/harness.ts) hands the client `@blueshift-gg/xark` with
 `prove` routed through its worker pool, as the prover's `wasm` option. On an M4 Max that's about
 0.9 s per proof instead of 3.7 s, with the same proofs and the same errors.
 

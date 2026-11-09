@@ -13,8 +13,8 @@ just clippy
 just check-clients
 ```
 
-`just test` makes development keys, verifier crates, clients and SBF programs under ignored
-`target/` directories, then proves with each client and verifies on-chain in LiteSVM. Never commit
+`just test` makes keys, verifier crates, clients and SBF programs under ignored `target/` and
+`*-verifier/` directories, then proves with each client and verifies on-chain in LiteSVM. Never commit
 generated keys or real witness data.
 
 ## Repository contracts

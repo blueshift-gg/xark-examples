@@ -26,6 +26,9 @@ commitment = Poseidon2(born, salt)
 use xark::prelude::*;
 use xark_hash::Hash;
 
+/// A calendar day from 1900 through 2100.
+pub type Date = Days<1900, 2100>;
+
 #[input]
 pub struct Identity {
     pub born: Date,
@@ -64,17 +67,17 @@ pub fn age_verification(
 ) {
     require_eq(id.commitment(), commitment);
     require(id.born <= policy.born_by);
-    // bind `holder`: one constraint per half (below)
+    bind(holder);
 }
 ```
 
-It's [xark's `zkyc`](https://github.com/blueshift-gg/xark/blob/remove-nightly-compiler/examples/zkyc/src/lib.rs)
+It's [xark's `zkyc`](https://github.com/blueshift-gg/xark/blob/master/examples/zkyc/src/lib.rs)
 cut down to one rule. Everything is a typed input:
 
 - **`Identity` and `Policy` are `#[input]` structs**, in the circuit, in tests, and in the TypeScript
   client, which gets `Identity { born: Date, salt }` and `Policy { bornBy: Date }`.
-- **`Date` compares as a date**: `id.born <= policy.born_by` is a 27-bit comparison, with no
-  arithmetic on the encoding.
+- **`Date` compares as a date**: xark's `Days<1900, 2100>` is a count of days since 1900-01-01,
+  17 bits, so `id.born <= policy.born_by` is a 17-bit comparison.
 - **`#[input] impl` exports the Rust to the client.** The issuer computes the commitment with the
   very function the circuit checks it with (`Identity.commitment(id)`), and the holder builds the
   program's policy with `Policy.adultOn(today)`. There's no second implementation to drift.
@@ -96,16 +99,16 @@ from the transaction's signer, so the proof only verifies when the wallet it was
 
 Nothing in the circuit computes with `holder`, and that's a trap: Groth16 checks a public input only
 through the constraints that use it, so an unused one would verify with any value. `xark build`
-refuses such a circuit, and the fix is one constraint per half, Tornado's `recipientSquare`
-(`half * half`).
+refuses such a circuit. `bind(holder)` is the fix: one constraint per half, Tornado's
+`recipientSquare` (`half * half`).
 
 ## The program supplies the rest
 
 The [program](./program/src/lib.rs) takes the holder as its signer and `proof ‖ commitment` as
 instruction data, and supplies the other public inputs itself: `Policy::adult_on(today)`, with today's UTC date from the `Clock` sysvar
-(Howard Hinnant's `civil_from_days`). The program can't link xark, so it computes `born_by` in a few
-lines of `no_std` Rust; its tests check both against the calendar and against the circuit's
-`Policy::adult_on` for every day across 300 years. A prover can't backdate or postdate, and a proof
+(Howard Hinnant's `civil_from_days`). The program can't link xark, so it computes `born_by`, as the
+circuit's day count, in a few lines of `no_std` Rust; its tests check the calendar against fixed
+dates, and `born_by` against the circuit's `Policy::adult_on` for every day from 1918 to 2100. A prover can't backdate or postdate, and a proof
 made today stops verifying tomorrow. The [test](./client/age-verification.test.ts) shows each case:
 the proof verifies today for its wallet, and fails for another wallet, for someone else's
 commitment, and the next day.
@@ -131,7 +134,7 @@ worth, document expiry).
 ## Run it
 
 ```bash
-just build          # circuit → dev keys → verifier crate → client → .so
+just build          # circuit → key → verifier crate → client → .so
 just test-circuit   # adult, 18 today, 18 tomorrow, 29 February, another identity
 cd .. && npx vitest run 02   # issue, prove with the client, verify on-chain (LiteSVM)
 ```

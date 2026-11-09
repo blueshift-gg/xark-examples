@@ -29,11 +29,11 @@ Two phases:
 The example justfiles run:
 
 ```bash
-xark setup <circuit-dir> --insecure-dev-mode --r1cs-form reduced
+xark setup <circuit-dir> --r1cs-form reduced
 ```
 
-`--insecure-dev-mode` asks for a single-party setup from the machine's randomness. (`--r1cs-form
-reduced` picks the R1CS form the provers stream from the circuit itself.) It's sound unless whoever
+With no `.ptau`, that's a single-party setup from the machine's randomness. (`--r1cs-form reduced`
+picks the R1CS form the provers stream from the circuit itself.) It's sound unless whoever
 ran it kept that randomness, which xark never writes down, but everyone relying on the verifier has
 to trust that one party, and there's no transcript to show them. `xark export` records how a key was
 made in the verifier crate's `SETUP` constant: `single-party` here, `ceremony` for two or more

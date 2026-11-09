@@ -1,6 +1,6 @@
 # From a single-party key to a ceremony
 
-Every example builds with a **single-party key**: `xark setup --insecure-dev-mode` samples the
+Every example builds with a **single-party key**: `xark setup`, with no `.ptau`, samples the
 Groth16 trapdoor from one machine's randomness and never writes it down. The key is sound unless
 whoever ran setup kept that randomness, but everyone relying on the verifier has to trust that one
 party; the exported crate's `SETUP` constant says `single-party`. This page replaces the key with a

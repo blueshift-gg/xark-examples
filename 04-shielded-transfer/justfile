@@ -8,7 +8,7 @@ build:
     @xark --version | grep -q '^xark 0\.3\.' || { echo "needs xark 0.3: see ../RUNBOOK.md" >&2; exit 1; }
     xark build circuits/transact
     # A single-party key from this machine's randomness (see ../RUNBOOK.md).
-    xark setup circuits/transact --insecure-dev-mode --r1cs-form reduced
+    xark setup circuits/transact --r1cs-form reduced
     # The verifier crate's self-test vector: a proof of examples/demo.rs.
     cd circuits/transact && cargo run -q --release --example demo
     xark export circuits/transact --crate-name shielded-transfer-transact-xark-verifier

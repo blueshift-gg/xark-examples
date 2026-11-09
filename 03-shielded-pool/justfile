@@ -11,7 +11,7 @@ build: xark (circuit "deposit" "shielded-pool-deposit-xark-verifier") (circuit "
 # its demo inputs as the verifier crate's self-test, the verifier crate, the client.
 circuit name crate:
     xark build circuits/{{name}}
-    xark setup circuits/{{name}} --insecure-dev-mode --r1cs-form reduced
+    xark setup circuits/{{name}} --r1cs-form reduced
     cd circuits/{{name}} && cargo run -q --release --example demo
     xark export circuits/{{name}} --crate-name {{crate}}
     xark client circuits/{{name}} --out client/

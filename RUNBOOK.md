@@ -48,7 +48,7 @@ Each example's `just build` runs the same steps:
 
 ```bash
 xark build <circuit>                        # Rust → wasm → R1CS: target/xark/<name>/
-xark setup <circuit> --insecure-dev-mode --r1cs-form reduced   # a single-party key (see §5)
+xark setup <circuit> --r1cs-form reduced   # a single-party key (see §5)
 <prove the demo inputs>                     # the verifier crate's self-test vector
 xark export <circuit> --crate-name <name>   # the verifier crate, beside the circuit's sources
 xark client <circuit> --out client/         # the typed TypeScript client

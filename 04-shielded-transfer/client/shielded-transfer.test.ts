@@ -100,8 +100,8 @@ const pay = (owner: Key, value: bigint) => {
 };
 
 /**
- * A transact can need more than the default 200k compute units: measured at 193k to
- * 204k, varying with its public inputs (the verifier skips the scalar multiplication
+ * A transact comes close to the default 200k compute units: measured at 179k to
+ * 185k, varying with its public inputs (the verifier skips the scalar multiplication
  * for a small one). Ask for 250k.
  */
 const budget = getSetComputeUnitLimitInstruction({ units: 250_000 });

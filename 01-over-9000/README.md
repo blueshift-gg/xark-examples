@@ -236,11 +236,11 @@ const tx = await pipe(
   (m) => signTransactionMessageWithSigners(m),
 );
 const result = svm.sendTransaction(tx);
-console.log(result instanceof FailedTransactionMetadata ? `failed: ${result.err()}` : `verified on-chain in ${result.computeUnitsConsumed()} CU`);
+console.log(result instanceof FailedTransactionMetadata ? `failed: ${result.err()}` : `verified onchain in ${result.computeUnitsConsumed()} CU`);
 ```
 
 ```bash
-npx tsx prove.ts    # verified on-chain in 75949 CU
+npx tsx prove.ts    # verified onchain in 75949 CU
 ```
 
 That's the whole loop: change the circuit, rerun steps 1–2 and rebuild, and the client and the

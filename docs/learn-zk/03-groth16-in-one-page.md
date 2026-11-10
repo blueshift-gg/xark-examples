@@ -22,13 +22,13 @@ cheaply on Solana," Groth16 is the pragmatic pick.
 After setup you have two keys:
 
 - a **proving key** (big, used off-chain to make proofs), and
-- a **verifying key** (small, embedded in your on-chain program by `xark export`).
+- a **verifying key** (small, embedded in your onchain program by `xark export`).
 
 Then:
 
 ```
 prove(proving_key, public_inputs, witness)  ->  proof         (off-chain: `xark prove`, or a client)
-verify(verifying_key, public_inputs, proof) ->  true / false  (on-chain, in your program)
+verify(verifying_key, public_inputs, proof) ->  true / false  (onchain, in your program)
 ```
 
 The verifier folds the **public inputs** into its check, so a proof is bound to the exact public
@@ -45,7 +45,7 @@ only needs bound, like that recipient, gets one cheap constraint (`pool::bind`, 
 - `xark client` → a typed TypeScript client: prove (and verify) in the browser or node.
 - `xark export` → a Rust verifier crate with the verifying key baked in.
 
-A proof leaves the client as 256 bytes (`proof.toBytes()`). On-chain, your program assembles the
+A proof leaves the client as 256 bytes (`proof.toBytes()`). Onchain, your program assembles the
 public inputs itself, 32-byte little-endian field elements, and makes one call:
 `verify(&Proof::from_le_bytes(&proof), &public_inputs)`. The `alt_bn128` syscalls do the heavy
 lifting.

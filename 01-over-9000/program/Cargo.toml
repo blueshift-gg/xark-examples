@@ -1,4 +1,4 @@
-# On-chain verifier program for the "over 9000" circuit.
+# Onchain verifier program for the "over 9000" circuit.
 # Built with Pinocchio for minimal compute-unit cost — the whole program is a
 # single `verify` call.
 #

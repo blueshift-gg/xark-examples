@@ -1,4 +1,4 @@
-//! What the pool's two circuits share, and 05's: paths into the Merkle tree of
+//! What the pool's two circuits share, and 06's: paths into the Merkle tree of
 //! notes, and Solana addresses as circuit inputs.
 //!
 //! The tree is `xark-merkle`'s, whose membership fold is formally verified: every

@@ -36,7 +36,7 @@ the examples below are that choice made five ways.
 | [02 · zKYC](./02-zkyc/) | a committed identity meets the program's KYC policy, revealing none of it | range proofs put to work (age, net worth), an allow-list that hides which country, a salted commitment, binding the signer | 5 | Pinocchio |
 | [03 · token-claim](./03-token-claim/) | an address is on a list of a million, for its amount, and claims it once (a Merkle airdrop) | Merkle trees in a circuit: a leaf of address and amount, the path private | 4 | Pinocchio + SPL |
 | [04 · shielded-pool](./04-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado) | Merkle trees plus salted commitments: notes and nullifiers, a tree the program grows | 4 + 7 | Pinocchio |
-| [05 · shielded-transfer](./05-shielded-transfer/) | a private payment of any amount (Zcash-style) | Merkle trees and range proofs together: range-checked amounts so the sums can't wrap; notes, keys, JoinSplit, SPL | 19 | Pinocchio + SPL |
+| [05 · shielded-transfer](./06-shielded-transfer/) | a private payment of any amount (Zcash-style) | Merkle trees and range proofs together: range-checked amounts so the sums can't wrap; notes, keys, JoinSplit, SPL | 19 | Pinocchio + SPL |
 
 ## How it fits together
 

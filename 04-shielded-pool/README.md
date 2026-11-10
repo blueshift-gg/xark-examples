@@ -8,7 +8,7 @@ with [02](../02-zkyc/)'s **salted commitments** as its leaves, plus nullifiers, 
 with every deposit. Range proofs play only a supporting role: they bound the relayer's `fee` (a
 `u64`, which the program also checks is at most the denomination) and the leaf index (a `u32`,
 bounded below 2^20 as its bits steer the path). Amounts need none, since every note in a pool is the
-same denomination; [05](../05-shielded-transfer/) is where range proofs become essential.
+same denomination; [06](../06-shielded-transfer/) is where range proofs become essential.
 
 > **Reference implementation. Unaudited. Educational.** Mixers carry real legal and regulatory weight
 > depending on where you are. For anything that holds value, use keys from a multi-party
@@ -76,7 +76,7 @@ Every root a circuit computes is `xark-merkle`'s `merkle_root`, whose fold is fo
 (Lean, in xark). `Path` adds what a wallet needs around it.
 
 `Path` lives in [`circuits/pool`](./circuits/pool/src/lib.rs), an ordinary Rust crate both circuits
-import (and [05](../05-shielded-transfer/) reuses). Its `#[input] impl` puts the same code in the
+import (and [06](../06-shielded-transfer/) reuses). Its `#[input] impl` puts the same code in the
 TypeScript clients, so the wallet *is* the circuit's Rust:
 
 ```ts
@@ -107,12 +107,12 @@ it; the two addresses get one constraint per half (`pool::bind`, Tornado's `reci
 seeded by the amount, like Tornado's separate 0.1 / 1 / 10 pools. One program serves every size, and
 nullifiers are namespaced per denomination. Amounts are hidden *within* a pool because every note in
 it has identical value; arbitrary hidden amounts need value-carrying notes, which is
-[05](../05-shielded-transfer/).
+[06](../06-shielded-transfer/).
 
 ## Anatomy
 
 ```
-circuits/pool/       Path (the tree, for circuits and wallets), bind: shared with 05
+circuits/pool/       Path (the tree, for circuits and wallets), bind: shared with 06
 circuits/deposit/    proves a tree append                (public: Append)
 circuits/withdraw/   proves membership + nullifier, and  (public: Withdrawal)
                      Note's commitment and nullifier hash
@@ -259,4 +259,4 @@ Measured in the client test's LiteSVM, the whole instruction with its system-pro
 varies with its public inputs; a withdrawal also with how many bumps the nullifier's address takes
 to find (1,500 CU each).
 
-Next → [05 · Shielded transfer](../05-shielded-transfer/)
+Next → [05 · Anonymous voting](../05-anonymous-voting/): a nullifier scoped to a poll

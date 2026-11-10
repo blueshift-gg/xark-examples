@@ -26,7 +26,7 @@ useful ZK applications need this kind of binding.
 [Example 03](../../03-token-claim/) brings Merkle trees into the circuit: a leaf of address and
 amount, the path a private input, membership in a list of a million in the same 256-byte proof.
 [Example 04](../../04-shielded-pool/) puts 02's salted commitments in that tree and adds nullifiers,
-recent roots, and a tree the program grows onchain. [Example 05](../../05-shielded-transfer/) brings
+recent roots, and a tree the program grows onchain. [Example 06](../../06-shielded-transfer/) brings
 range proofs back: private values of any amount, each range-checked so the balance can't wrap the
 field, with keys, SPL tokens, and encrypted note delivery.
 

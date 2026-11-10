@@ -1,4 +1,4 @@
-# 05 · Shielded transfer: private payments, any amount (Zcash-style)
+# 06 · Shielded transfer: private payments, any amount (Zcash-style)
 
 Shield SPL tokens, privately pay someone any amount (hidden value, hidden sender, hidden recipient),
 then later unshield. Onchain an observer sees deposits and withdrawals but never who paid whom, or
@@ -246,5 +246,7 @@ Account checks fail with the runtime's errors (`MissingRequiredSignature`, `Immu
 | 5 | `NoRelayer` | a fee (`fee > 0`) without `relayer_token` |
 | 6 | `NullifierSpent` | a nullifier's account exists: the note was spent |
 | 7 | `WrongMint` | a token account of another mint than the pool's |
+
+Previous ← [05 · Anonymous voting](../05-anonymous-voting/)
 
 Back to the [index](../README.md).

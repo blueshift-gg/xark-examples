@@ -78,10 +78,10 @@ jobs:
             workspaces: |
               05-anonymous-voting/circuit
               05-anonymous-voting/program
-          - example: 05-shielded-transfer
+          - example: 06-shielded-transfer
             workspaces: |
-              05-shielded-transfer/circuits/transact
-              05-shielded-transfer/program
+              06-shielded-transfer/circuits/transact
+              06-shielded-transfer/program
     name: ${{ matrix.example }}
     defaults:
       run:

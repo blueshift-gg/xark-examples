@@ -119,5 +119,5 @@ client to the circuit and key it was made for: `Circuit.prover(url, { digest })`
    A wallet or relayer must sequence submissions, refresh pool state immediately before proving,
    and prove again when another append wins the race. A high-throughput product needs a
    sequencer/batcher or an on-chain append design in front of this reference protocol.
-4. **Note delivery.** Example 05 binds the withdrawal's token account and both encrypted memos'
+4. **Note delivery.** Example 06 binds the withdrawal's token account and both encrypted memos'
    hashes into the proof; the program recomputes them before verifying.

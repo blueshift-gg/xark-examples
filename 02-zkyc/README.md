@@ -230,4 +230,4 @@ just test-circuit   # who passes, who doesn't; then the program's policy and pac
 cd .. && npx vitest run 02   # issue, prove with the client, verify onchain (LiteSVM)
 ```
 
-Next → [03 · Shielded pool](../03-shielded-pool/)
+Next → [03 · Token claim](../03-token-claim/)

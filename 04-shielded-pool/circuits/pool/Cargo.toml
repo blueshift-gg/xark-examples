@@ -1,4 +1,4 @@
-# What the pool's circuits share, and 04's: an ordinary Rust library, compiled
+# What the pool's circuits share, and 05's: an ordinary Rust library, compiled
 # into each circuit like xark's own gadget crates.
 [package]
 name = "pool"

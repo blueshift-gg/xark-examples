@@ -12,8 +12,8 @@ publish = false
 [dependencies]
 xark = "0.3"
 xark-poseidon2 = "0.3"
-# 03's tree and addresses, as an ordinary crate: the same tree, hash and zeros.
-pool = { path = "../../../03-shielded-pool/circuits/pool" }
+# 04's tree and addresses, as an ordinary crate: the same tree, hash and zeros.
+pool = { path = "../../../04-shielded-pool/circuits/pool" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

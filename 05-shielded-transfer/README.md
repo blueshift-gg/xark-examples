@@ -1,8 +1,8 @@
-# 04 · Shielded transfer: private payments, any amount (Zcash-style)
+# 05 · Shielded transfer: private payments, any amount (Zcash-style)
 
 Shield SPL tokens, privately pay someone any amount (hidden value, hidden sender, hidden recipient),
 then later unshield. Onchain an observer sees deposits and withdrawals but never who paid whom, or
-how much. Where [03](../03-shielded-pool/) is a fixed-denomination mixer, this is a
+how much. Where [04](../04-shielded-pool/) is a fixed-denomination mixer, this is a
 Zcash/Sapling-style shielded pool: notes with hidden values, a key hierarchy, and shielded→shielded
 transfers.
 
@@ -68,7 +68,7 @@ whole public statement from them: `Transaction.of(key, spends, outputs, tip, min
 
 In one proof: each real spend is in the tree at a remembered `root`, owned by the spender
 (`note.owner == key.address(diversifier)`), and burns the nullifier revealed; each output is the
-commitment revealed; value is conserved; and, 03's trick again, the two outputs are appended
+commitment revealed; value is conserved; and, 04's trick again, the two outputs are appended
 (`old_root → new_root`) so the chain never hashes. Every value is a `u64` input, range-checked on
 entry, so no sum can wrap the field. The program always appends notes in pairs at an even slot, so
 the second output's path is the first's with the first beside it: two `xark-merkle` roots, before
@@ -78,7 +78,7 @@ The public inputs are one `Transaction`: 19 field elements, `root, asset (hi, lo
 commitments[2], old_root, new_root, index, flow, recipient (hi, lo), relayer (hi, lo), memos[2]
 (hi, lo each)`. `flow` is `Flow`'s three `u64`s packed into one element, as xark packs a struct's
 narrow fields: `vpub_in + vpub_out·2⁶⁴ + fee·2¹²⁸`. Addresses (the mint, the token accounts) and memo hashes are all
-32 bytes, which the circuit takes as xark's `Hash`. The circuit imports 03's `pool` crate for `Path`;
+32 bytes, which the circuit takes as xark's `Hash`. The circuit imports 04's `pool` crate for `Path`;
 `xark profile` attributes every constraint to a source line.
 
 ## Delivery: encrypted memos, off-circuit
@@ -137,7 +137,7 @@ who holds no SOL, withdraws 95 through the relayer for another 5. The vault ends
 change, still shielded); Bob's withdrawal, redirected by someone else to their account or their fee,
 fails; a second withdrawal of Bob's note is refused; and Mallory can't spend Alice's note: the
 client names the failing line, `key.address(spend.diversifier)`. The wallet keeps every note's
-`Path` current as outputs land, with 03's `Path.update`.
+`Path` current as outputs land, with 04's `Path.update`.
 
 It proves across 8 worker threads: [`pooled`](./client/harness.ts) hands the client `@blueshift-gg/xark` with
 `prove` routed through its worker pool, as the prover's `wasm` option. On an M4 Max that's about
@@ -147,7 +147,7 @@ It proves across 8 worker threads: [`pooled`](./client/harness.ts) hands the cli
 
 ```
 circuits/transact/   the JoinSplit circuit: keys, notes, nullifiers, balance, membership, the
-                     pair append; imports 03's circuits/pool
+                     pair append; imports 04's circuits/pool
 client/              the generated client, and the wallet test
 program/             Pinocchio + SPL: verify, burn nullifiers, advance the tree, move SPL for
                      vpub_in/out, log memo events

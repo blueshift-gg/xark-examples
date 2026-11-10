@@ -2,7 +2,7 @@
 
 A distributor publishes one 32-byte root for a list of `(address, amount)` pairs and funds a vault of
 an SPL token. Each address on the list proves it's there, for its amount, and the program pays it,
-once. [02](../02-age-verification/) proved something about one committed value; this proves
+once. [02](../02-zkyc/) proved something about one committed value; this proves
 membership in a list of a million, with the same constant-size proof. Its one new idea is **a Merkle
 path as a private input**.
 
@@ -142,7 +142,7 @@ bytes.
 the signer and the instruction, so anyone reading the chain sees who claimed how much. That's the
 point of this example: a proof of membership, not of anonymity. Hiding who claims needs the
 claimant to stay off the transaction, which means a nullifier and a relayer: that's the
-[shielded pool](../03-shielded-pool/).
+[shielded pool](../04-shielded-pool/).
 
 **No nullifier, because the claimant is public.** A shielded pool's withdrawer is hidden, so the
 program can't remember *who* withdrew; it remembers a nullifier, a value only the note's owner can
@@ -271,4 +271,4 @@ integer, as a little-endian field element.
 | `InvalidAccountData` | the distributor isn't one `initialize` made |
 | `MissingRequiredSignature` | the authority or the claimant didn't sign |
 
-Next → [Shielded pool](../03-shielded-pool/)
+Next → [04 · Shielded pool](../04-shielded-pool/)

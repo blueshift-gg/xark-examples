@@ -5,8 +5,8 @@
     "01-over-9000",
     "02-zkyc",
     "03-token-claim",
-    "03-shielded-pool",
-    "04-shielded-transfer"
+    "04-shielded-pool",
+    "05-shielded-transfer"
   ],
   "scripts": {
     "test": "npm test --workspaces"

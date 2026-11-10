@@ -27,8 +27,8 @@ the examples below are that choice made four ways.
 |---|---|---|:-:|---|
 | [01 · over-9000](./01-over-9000/) | a secret value is `> 9000` | range proofs, the whole loop | 0 | Pinocchio |
 | [02 · zkyc](./02-zkyc/) | a committed identity meets the program's KYC policy, revealing none of it | commitments, typed inputs, packing, a policy as a public input, binding the signer | 5 | Pinocchio |
-| [03 · shielded-pool](./03-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado) | Merkle paths, nullifiers, a wallet in Rust | 4 + 7 | Anchor |
-| [04 · shielded-transfer](./04-shielded-transfer/) | a private payment of any amount (Zcash-style) | notes, keys, JoinSplit, SPL, relayers | 21 | Anchor + SPL |
+| [04 · shielded-pool](./04-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado) | Merkle paths, nullifiers, a wallet in Rust | 4 + 7 | Anchor |
+| [05 · shielded-transfer](./05-shielded-transfer/) | a private payment of any amount (Zcash-style) | notes, keys, JoinSplit, SPL, relayers | 21 | Anchor + SPL |
 
 ## How it fits together
 
@@ -68,7 +68,7 @@ just test   # every example: circuit → keys → verifier → client → progra
 ```
 
 Or one example: `cd 02-zkyc && just test`. Each example is its own project, with its
-own `package.json` and tests, so you can copy one out and start from it (04 also takes 03's
+own `package.json` and tests, so you can copy one out and start from it (05 also takes 04's
 `circuits/pool` crate). Prerequisites (stable Rust, `cargo-build-sbf`, Node, `just`, and xark):
 [RUNBOOK.md](./RUNBOOK.md); `xark doctor` checks the Rust and xark side. Each example's README walks
 its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
@@ -79,13 +79,13 @@ its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
 |---|--:|--:|--:|--:|--:|
 | 01 `over_9000` | 128 | 0 | 20 ms | 9 ms | 75,916 |
 | 02 `zkyc` | 1,350 | 5 | 211 ms | 70 ms | 100,204 |
-| 03 `shielded_pool_deposit` | 9,647 | 4 | 1,635 ms | 403 ms | 96,766–97,349 |
-| 03 `shielded_pool_withdraw` | 5,382 | 7 | 920 ms | 180 ms | 119,607 |
-| 04 `shielded_transact` | 26,123 | 19 | 3,736 ms | 896 ms | 178,956–184,956 |
+| 04 `shielded_pool_deposit` | 9,647 | 4 | 1,635 ms | 403 ms | 96,766–97,349 |
+| 04 `shielded_pool_withdraw` | 5,382 | 7 | 920 ms | 180 ms | 119,607 |
+| 05 `shielded_transact` | 26,123 | 19 | 3,736 ms | 896 ms | 178,956–184,956 |
 
 Constraints from `xark inspect`. Proving in node 24 through the generated clients, median of three,
 on an Apple M4 Max; "8 workers" is `@blueshift-gg/xark`'s worker pool. Compute units are the whole instruction
-in LiteSVM, so 03 and 04 include the accounts they create and the tokens they move. 04 varies with
+in LiteSVM, so 04 and 05 include the accounts they create and the tokens they move. 05 varies with
 its public inputs, close to the default 200k limit, so its client asks for 250k. A proof is always 256
 bytes.
 

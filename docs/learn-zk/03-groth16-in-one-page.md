@@ -33,7 +33,7 @@ verify(verifying_key, public_inputs, proof) ->  true / false  (on-chain, in your
 
 The verifier folds the **public inputs** into its check, so a proof is bound to the exact public
 inputs it was made with: change the recipient in a withdrawal and the proof stops verifying.
-([Example 03](../../03-shielded-pool/) relies on this to stop front-running.) One subtlety: a public
+([Example 04](../../04-shielded-pool/) relies on this to stop front-running.) One subtlety: a public
 input is folded in *through the constraints that use it*. One that no constraint touches drops out
 of the check and verifies with any value. `xark build` refuses such a circuit; a value the circuit
 only needs bound, like that recipient, gets one cheap constraint (`pool::bind`, after Tornado's
@@ -54,8 +54,8 @@ lifting.
 
 **256 bytes, verified in about 74k compute units, plus a few thousand per public input.**
 Measured in these examples (whole instructions, LiteSVM): 01's bare verify, with no public inputs,
-is 75,916 CU; 03's deposit, with four, is 101,041; 04's whole transact, with 21 public inputs, two
-new accounts and SPL transfers, is 190,000 to 204,000. A ZK proof compresses an arbitrarily large private
+is 75,916 CU; 04's deposit, with four, is about 91,000; 05's whole transact, with 19 public inputs,
+two new accounts and SPL transfers, is 168,000 to 174,000. A ZK proof compresses an arbitrarily large private
 computation into that. That compression is the whole reason this is exciting for a blockchain.
 
 Next: [what a trusted setup is, and why you should care →](./04-trusted-setup-intuition.md)

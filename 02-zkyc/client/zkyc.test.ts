@@ -35,11 +35,11 @@ const credential = (changes: Partial<Identity> = {}): Identity => ({
 const programs = (today: string) =>
   Policy.default().on(new Date(today)).minAge(18).worthAtLeast(500_000).nationalities([Country.DE, Country.FR, Country.GB, Country.US]);
 
-/** The instruction: signed by `holder`, the proof, then the commitment it's for. */
+/** The instruction: signed by `holder`, its discriminator (0), the proof, then the commitment it's for. */
 const verifyKyc = (holder: KeyPairSigner, proof: Uint8Array, commitment: Field) => ({
   programAddress: program,
   accounts: [{ address: holder.address, role: AccountRole.READONLY_SIGNER, signer: holder }],
-  data: new Uint8Array([...proof, ...commitment.toBytes()]),
+  data: new Uint8Array([0, ...proof, ...commitment.toBytes()]),
 });
 const bytes = (a: Address) => new Uint8Array(getAddressEncoder().encode(a));
 
@@ -67,15 +67,15 @@ test("a compliant holder passes KYC onchain, under the program's policy and for 
 
   // Someone who saw the proof can't submit it as their own.
   const copycat = await generateKeyPairSigner();
-  await expect(send(svm, payer, verifyKyc(copycat, proof.toBytes(), commitment))).rejects.toThrow(/invalid instruction data/);
+  await expect(send(svm, payer, verifyKyc(copycat, proof.toBytes(), commitment))).rejects.toThrow(/InvalidProof/);
 
   // Another commitment: someone else's credential.
   const other = Identity.commitment(credential());
-  await expect(send(svm, payer, verifyKyc(holder, proof.toBytes(), other))).rejects.toThrow(/invalid instruction data/);
+  await expect(send(svm, payer, verifyKyc(holder, proof.toBytes(), other))).rejects.toThrow(/InvalidProof/);
 
   // Tomorrow the program supplies another `today` and `born_by`, so yesterday's proof fails.
   setDay(svm, "2026-10-23");
-  await expect(send(svm, payer, verifyKyc(holder, proof.toBytes(), commitment))).rejects.toThrow(/invalid instruction data/);
+  await expect(send(svm, payer, verifyKyc(holder, proof.toBytes(), commitment))).rejects.toThrow(/InvalidProof/);
 });
 
 test("the verifier picks the rules, not the prover", async () => {
@@ -90,7 +90,7 @@ test("the verifier picks the rules, not the prover", async () => {
 
   const lax = programs("2026-10-22").worthAtLeast(0);
   const proof = prover.prove({ id, commitment, policy: lax, holder: bytes(holder.address) });
-  await expect(send(svm, payer, verifyKyc(holder, proof.toBytes(), commitment))).rejects.toThrow(/invalid instruction data/);
+  await expect(send(svm, payer, verifyKyc(holder, proof.toBytes(), commitment))).rejects.toThrow(/InvalidProof/);
 });
 
 test("an identity that fails the policy has no proof", () => {

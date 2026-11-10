@@ -1,4 +1,4 @@
-//! What the pool's two circuits share, and 04's: paths into the Merkle tree of
+//! What the pool's two circuits share, and 05's: paths into the Merkle tree of
 //! notes, and Solana addresses as circuit inputs.
 //!
 //! The tree is `xark-merkle`'s, whose membership fold is formally verified: every
@@ -12,7 +12,7 @@
 //! is constraints; on the host (and in the TypeScript client, through `#[input]
 //! impl`) it computes the roots a wallet proves, so the two can't disagree.
 //! `Path::first`, `next` and `update` are host-only: a wallet keeps its paths
-//! current as notes land on-chain.
+//! current as notes land onchain.
 //!
 //! Tree nodes are Poseidon (`xark_poseidon::hash2`, as `xark-merkle` hashes them);
 //! note commitments and nullifiers are Poseidon2 (`xark_poseidon2::hash`), another

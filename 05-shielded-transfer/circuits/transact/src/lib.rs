@@ -9,7 +9,7 @@
 //! - each real note spent is in the tree at `root`, its spender holds its key, and
 //!   its nullifier is the one revealed (so it can't be spent again);
 //! - the two new notes are the `commitments` revealed, and are appended as a pair at
-//!   `index`, taking the tree from `old_root` to `new_root` (03's deposit, for two);
+//!   `index`, taking the tree from `old_root` to `new_root` (04's deposit, for two);
 //! - value is conserved: `in + vpub_in == out + vpub_out + fee`.
 //!
 //! Every value is a `u64` input, range-checked on entry, so the sums can't wrap.
@@ -209,7 +209,7 @@ pub fn shielded_transact(
     // Every value is a range-checked `u64`, so these few sums can't wrap the field.
     require_eq(value_in, value_out);
 
-    // Append the pair at `index`, an even slot. As in 03's deposit, the old root
+    // Append the pair at `index`, an even slot. As in 04's deposit, the old root
     // pins `tip` to the tree's true nodes.
     require(tip.index == tx.index);
     require(tx.index.is_multiple_of(2));

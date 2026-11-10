@@ -54,7 +54,7 @@ lifting.
 
 **256 bytes, verified in about 74k compute units, plus a few thousand per public input.**
 Measured in these examples (whole instructions, LiteSVM): 01's bare verify, with no public inputs,
-is 73,912 CU; 03's deposit, with four, is 101,041; 04's whole transact, with 21 public inputs, two
+is 75,916 CU; 03's deposit, with four, is 101,041; 04's whole transact, with 21 public inputs, two
 new accounts and SPL transfers, is 190,000 to 204,000. A ZK proof compresses an arbitrarily large private
 computation into that. That compression is the whole reason this is exciting for a blockchain.
 

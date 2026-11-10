@@ -123,10 +123,10 @@ program: 20 siblings, 640 bytes, and 20 hashes, all of which grow with the tree,
 hash must match the distributor's byte for byte. Here the path stays in the proof:
 
 - **Constant size.** A claim is the proof (256 bytes) and the amount (8 bytes), whatever the tree's
-  depth: a circuit for a deeper tree takes the same transaction. - **The program never hashes.** It
-  checks one proof against the root it stores; there's no Poseidon2 onchain to keep in step with the
-  circuit's. That agreement holds by construction. - **The rest of the list stays offchain.** No
-  sibling, and no index, ever appears in a transaction. A sibling leaf is the Poseidon2 hash of an
+  depth: a circuit for a deeper tree takes the same transaction.
+- **The program never hashes.** It checks one proof against the root it stores; there's no
+  Poseidon2 onchain to keep in step with the circuit's. That agreement holds by construction.
+- **The rest of the list stays offchain.** No sibling, and no index, ever appears in a transaction. A sibling leaf is the Poseidon2 hash of an
   address and an amount, which anyone can test against a known address; a claim here gives nothing
   away about the other entries.
 

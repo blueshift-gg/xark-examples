@@ -48,7 +48,7 @@ const proof = prover.prove({ powerLevel: 9001 });
 The [program](./program/src/lib.rs) has one instruction, `Verify`, and no accounts: its instruction
 data is the proof, parsed to exactly 256 bytes (else the built-in `InvalidInstructionData`), then
 one call to the verifier crate `xark export` generated (a proof that fails is the program's own
-`Over9000Error::InvalidProof`, code 0). Verifying costs about 76,000 compute units. Try
+`Over9000Error::InvalidProof`, code 0, whose name it logs). Verifying costs about 76,000 compute units. Try
 `prover.prove({ powerLevel: 9000 })`: there's no proof to make, and the client throws a
 `CheckFailed` naming the line: ``the inputs fail the check at src/lib.rs:9:5: `require(power_level > 9000u64);` ``.
 
@@ -107,14 +107,27 @@ and `src/lib.rs`, the [program](./program/src/lib.rs) without its doc comments:
 ```rust
 #![no_std]
 use over_9000_verifier::{Proof, verify};
-use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError, program_entrypoint};
+use pinocchio::{
+    AccountView, Address, ProgramResult,
+    error::{ProgramError, ToStr},
+    program_entrypoint,
+};
 
 program_entrypoint!(process_instruction);
 pinocchio::nostd_panic_handler!();
 pinocchio::no_allocator!();
 
 fn process_instruction(_: &Address, _: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    Verify::try_from(data)?.process()
+    let result = Verify::try_from(data).and_then(|verify| verify.process());
+    if let Err(error @ ProgramError::Custom(_)) = &result {
+        log(error.to_str::<Over9000Error>());
+    }
+    result
+}
+
+fn log(message: &str) {
+    #[cfg(target_os = "solana")]
+    unsafe { pinocchio::syscalls::sol_log_(message.as_ptr(), message.len() as u64) };
 }
 
 pub struct VerifyInstructionData<'a> {
@@ -143,6 +156,8 @@ impl<'a> TryFrom<&'a [u8]> for Verify<'a> {
 }
 
 impl Verify<'_> {
+    // Out of line, or the pairing check's buffers take the entrypoint's frame past 4 KiB.
+    #[inline(never)]
     pub fn process(&self) -> ProgramResult {
         if !verify(&Proof::from_le_bytes(self.data.proof), &[]) {
             return Err(Over9000Error::InvalidProof.into());
@@ -159,6 +174,25 @@ pub enum Over9000Error {
 impl From<Over9000Error> for ProgramError {
     fn from(e: Over9000Error) -> Self {
         ProgramError::Custom(e as u32)
+    }
+}
+
+impl TryFrom<u32> for Over9000Error {
+    type Error = ProgramError;
+
+    fn try_from(code: u32) -> Result<Self, Self::Error> {
+        match code {
+            0 => Ok(Self::InvalidProof),
+            _ => Err(ProgramError::InvalidArgument),
+        }
+    }
+}
+
+impl ToStr for Over9000Error {
+    fn to_str(&self) -> &'static str {
+        match self {
+            Self::InvalidProof => "InvalidProof: invalid proof",
+        }
     }
 }
 ```

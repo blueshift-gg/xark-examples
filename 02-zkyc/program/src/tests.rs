@@ -84,8 +84,10 @@ fn days_are_calendar_days() {
 /// The client tests match the name the program logs for its error.
 #[test]
 fn errors_log_their_names() {
-    assert_eq!(
-        crate::ZkycError::name(crate::ZkycError::InvalidProof as u32),
-        "InvalidProof"
+    let error = pinocchio::error::ProgramError::from(crate::ZkycError::InvalidProof);
+    assert!(
+        error
+            .to_str::<crate::ZkycError>()
+            .starts_with("InvalidProof")
     );
 }

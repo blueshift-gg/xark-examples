@@ -36,7 +36,7 @@ fn process_instruction(
     instruction_data: &[u8],
 ) -> ProgramResult {
     let result = dispatch(accounts, instruction_data);
-    // The runtime names its own errors; ours it reports only as a number.
+    // The program's own errors log their names, which the client tests match.
     if let Err(error @ ProgramError::Custom(_)) = &result {
         helpers::log(error.to_str::<ShieldedTransferError>());
     }

@@ -6,7 +6,11 @@
 #![cfg_attr(not(test), no_std)]
 
 use over_9000_xark_verifier::{Proof, verify};
-use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError, program_entrypoint};
+use pinocchio::{
+    AccountView, Address, ProgramResult,
+    error::{ProgramError, ToStr},
+    program_entrypoint,
+};
 
 program_entrypoint!(process_instruction);
 #[cfg(not(test))]
@@ -19,7 +23,23 @@ fn process_instruction(
     _accounts: &mut [AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    Verify::try_from(instruction_data)?.process()
+    let result = Verify::try_from(instruction_data).and_then(|verify| verify.process());
+    // The program's own errors log their names, which the client tests match.
+    if let Err(error @ ProgramError::Custom(_)) = &result {
+        log(error.to_str::<Over9000Error>());
+    }
+    result
+}
+
+/// `Program log: <message>`.
+fn log(message: &str) {
+    #[cfg(any(target_os = "solana", target_arch = "bpf"))]
+    // SAFETY: the pointer and length are a valid `&str`'s.
+    unsafe {
+        pinocchio::syscalls::sol_log_(message.as_ptr(), message.len() as u64)
+    };
+    #[cfg(not(any(target_os = "solana", target_arch = "bpf")))]
+    let _ = message;
 }
 
 pub struct VerifyInstructionData<'a> {
@@ -75,5 +95,24 @@ pub enum Over9000Error {
 impl From<Over9000Error> for ProgramError {
     fn from(e: Over9000Error) -> Self {
         ProgramError::Custom(e as u32)
+    }
+}
+
+impl TryFrom<u32> for Over9000Error {
+    type Error = ProgramError;
+
+    fn try_from(code: u32) -> Result<Self, Self::Error> {
+        match code {
+            0 => Ok(Self::InvalidProof),
+            _ => Err(ProgramError::InvalidArgument),
+        }
+    }
+}
+
+impl ToStr for Over9000Error {
+    fn to_str(&self) -> &'static str {
+        match self {
+            Self::InvalidProof => "InvalidProof: invalid proof",
+        }
     }
 }

@@ -29,7 +29,7 @@ impl TryFrom<u32> for TokenClaimError {
 impl ToStr for TokenClaimError {
     fn to_str(&self) -> &'static str {
         match self {
-            TokenClaimError::InvalidProof => "Error: InvalidProof",
+            TokenClaimError::InvalidProof => "InvalidProof: invalid proof",
         }
     }
 }

@@ -29,19 +29,24 @@ fn process_instruction(
     accounts: &mut [AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    let result = match instruction_data.split_first() {
-        Some((VerifyKyc::DISCRIMINATOR, data)) => {
-            VerifyKyc::try_from((data, &*accounts))?.process()
-        }
-        _ => Err(ProgramError::InvalidInstructionData),
-    };
+    let result = dispatch(accounts, instruction_data);
     // The program's own errors log their names, which the client tests match.
-    if let Err(ProgramError::Custom(code)) = result {
-        log(ZkycError::name(code));
+    if let Err(error @ ProgramError::Custom(_)) = &result {
+        log(error.to_str::<ZkycError>());
     }
     result
 }
 
+fn dispatch(accounts: &mut [AccountView], instruction_data: &[u8]) -> ProgramResult {
+    match instruction_data.split_first() {
+        Some((VerifyKyc::DISCRIMINATOR, data)) => {
+            VerifyKyc::try_from((data, &*accounts))?.process()
+        }
+        _ => Err(ProgramError::InvalidInstructionData),
+    }
+}
+
+/// `Program log: <message>`.
 fn log(message: &str) {
     #[cfg(any(target_os = "solana", target_arch = "bpf"))]
     // SAFETY: the pointer and length are a valid `&str`'s.

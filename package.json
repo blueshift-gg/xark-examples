@@ -6,6 +6,7 @@
     "02-zkyc",
     "03-token-claim",
     "04-shielded-pool",
+    "05-anonymous-voting",
     "05-shielded-transfer"
   ],
   "scripts": {

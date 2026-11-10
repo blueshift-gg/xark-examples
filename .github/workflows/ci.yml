@@ -74,6 +74,10 @@ jobs:
               04-shielded-pool/circuits/pool
               04-shielded-pool/circuits/withdraw
               04-shielded-pool/program
+          - example: 05-anonymous-voting
+            workspaces: |
+              05-anonymous-voting/circuit
+              05-anonymous-voting/program
           - example: 05-shielded-transfer
             workspaces: |
               05-shielded-transfer/circuits/transact

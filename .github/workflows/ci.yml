@@ -18,7 +18,7 @@ env:
   # The Rust toolchain itself is pinned in rust-toolchain.toml (1.95.0, with the
   # wasm32 target); these are the tools installed beside it.
   CARGO_BUILD_SBF_VERSION: 4.2.0
-  XARK_CLI_VERSION: 0.3.0
+  XARK_CLI_VERSION: 0.3.1
 
 jobs:
   # Neither tool has a prebuilt binary that cargo-binstall (or install-action, which
@@ -74,10 +74,14 @@ jobs:
               04-shielded-pool/circuits/pool
               04-shielded-pool/circuits/withdraw
               04-shielded-pool/program
-          - example: 05-shielded-transfer
+          - example: 05-anonymous-voting
             workspaces: |
-              05-shielded-transfer/circuits/transact
-              05-shielded-transfer/program
+              05-anonymous-voting/circuit
+              05-anonymous-voting/program
+          - example: 06-shielded-transfer
+            workspaces: |
+              06-shielded-transfer/circuits/transact
+              06-shielded-transfer/program
     name: ${{ matrix.example }}
     defaults:
       run:

@@ -6,7 +6,8 @@
     "02-zkyc",
     "03-token-claim",
     "04-shielded-pool",
-    "05-shielded-transfer"
+    "05-anonymous-voting",
+    "06-shielded-transfer"
   ],
   "scripts": {
     "build": "npm run build --workspaces",

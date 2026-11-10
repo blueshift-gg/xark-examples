@@ -1,4 +1,4 @@
-# 05 · Shielded transfer: private payments, any amount (Zcash-style)
+# 06 · Shielded transfer: private payments, any amount (Zcash-style)
 
 Shield SPL tokens, privately pay someone any amount (hidden value, hidden sender, hidden recipient),
 then later unshield. Onchain an observer sees deposits and withdrawals but never who paid whom, or
@@ -113,15 +113,31 @@ the vault; withdrawals and fees transfer out, signed by the pool PDA. A transact
 token accounts it uses: a deposit its source (`user_token`), a withdrawal its destination
 (`recipient_token`), a fee the relayer's (`relayer_token`).
 
-A transact uses 168k to 174k compute units (measured in the test: a deposit 173k, a private
-transfer 170k, a withdrawal 168k; it varies with the public inputs), almost all of it the Groth16
-check. That's close to the default limit of 200k, so the client asks for 250k with a compute budget
-instruction.
+A transact uses 166k to 180k compute units (measured in the test over six runs), almost all of it
+the Groth16 check. It varies with the public inputs, and by 1.5k for each extra try
+`find_program_address` takes to find a nullifier's bump. That's close to the default limit of 200k,
+so the client asks for 250k with a compute budget instruction.
 
 ## The program
 
-[`program/`](./program/src/lib.rs) is one Pinocchio crate, no framework, so every account check is
-written out, in `initialize_accounts` and `transact_accounts`, and runs before anything changes:
+[`program/`](./program/src/lib.rs) is one Pinocchio crate, no framework, laid out as Pinocchio
+programs usually are:
+
+```
+program/src/
+  lib.rs                    the entrypoint: dispatch on the first byte, log a custom error's name
+  instructions/
+    initialize.rs           InitializeAccounts, Initialize
+    transact.rs             TransactAccounts, TransactInstructionData, Transact, the public inputs
+  state.rs                  Pool, the seeds and constants
+  errors.rs                 ShieldedTransferError
+  helpers.rs                the account checks both instructions use
+  tests.rs                  host tests
+```
+
+Each instruction is a struct built with `TryFrom` from its instruction data and accounts, then
+`process`ed. Every account check is written out, in the `TryFrom` of `InitializeAccounts`,
+`TransactAccounts` and `Transact`, and runs before anything changes:
 signers and writable flags; the token and system program ids; the pool owned by the program, of a
 pool's size, at its PDA; the vault at its PDA, the pool's token account of the pool's mint; each
 nullifier at its canonical PDA and not yet spent; each token account given the token program's,
@@ -178,8 +194,9 @@ The protocol path is complete, but a deployed product still needs the surroundin
 
 ### Instructions
 
-Instruction data starts with a one-byte tag; the arguments follow, fixed-size ones as their bytes
-and integers little-endian.
+Instruction data starts with a one-byte discriminator; the arguments follow, fixed-size ones as
+their bytes and integers little-endian. The program's address is its `ID`,
+`CUCcJJBRbK6tK4nPP2zgmvdYbKWSCGGVdRegtJ2GPJtF`, which the PDAs derive from.
 
 **`0` initialize** (no arguments): create the pool and token `vault` for one SPL mint. Accounts:
 `pool` (writable, PDA, not yet created), `vault` (writable, PDA, not yet created: becomes a token
@@ -217,7 +234,7 @@ base64): `leaf_index` (u32), `commitment` (32 B), the encrypted memo.
 Account checks fail with the runtime's errors (`MissingRequiredSignature`, `Immutable`,
 `IncorrectProgramId`, `InvalidAccountOwner`, `InvalidAccountData`, `InvalidSeeds`,
 `AccountAlreadyInitialized`, `UninitializedAccount`, `IncorrectAuthority`); the program's own are
-`Custom(code)`, and each logs its name:
+`ShieldedTransferError`, as `Custom(code)`, and the entrypoint logs each one's name:
 
 | Code | Error | When |
 |---|---|---|
@@ -229,5 +246,7 @@ Account checks fail with the runtime's errors (`MissingRequiredSignature`, `Immu
 | 5 | `NoRelayer` | a fee (`fee > 0`) without `relayer_token` |
 | 6 | `NullifierSpent` | a nullifier's account exists: the note was spent |
 | 7 | `WrongMint` | a token account of another mint than the pool's |
+
+Previous ← [05 · Anonymous voting](../05-anonymous-voting/)
 
 Back to the [index](../README.md).

@@ -6,8 +6,11 @@
 //! the same instructions end to end in LiteSVM.
 use super::*;
 use pinocchio::account::{NOT_BORROWED, RuntimeAccount};
+use shielded_pool_deposit_xark_verifier as deposit_verifier;
+use shielded_pool_deposit_xark_verifier::Proof; // the same type in both verifier crates
+use shielded_pool_withdraw_xark_verifier as withdraw_verifier;
 
-const PROGRAM: Address = Address::new_from_array([9; 32]);
+const PROGRAM: Address = ID;
 const SYSTEM: Address = pinocchio_system::ID;
 const DENOMINATION: u64 = 1_000_000_000;
 
@@ -115,7 +118,7 @@ fn reaches_creation(result: ProgramResult) {
     assert_eq!(result, Err(ProgramError::UnsupportedSysvar));
 }
 
-fn custom(error: PoolError) -> ProgramResult {
+fn custom(error: ShieldedPoolError) -> ProgramResult {
     Err(ProgramError::Custom(error as u32))
 }
 
@@ -166,7 +169,7 @@ fn initialize_accounts() -> [Account; 3] {
 }
 
 fn initialize_ix() -> Vec<u8> {
-    ix(INITIALIZE, &[&DENOMINATION.to_le_bytes()])
+    ix(*Initialize::DISCRIMINATOR, &[&DENOMINATION.to_le_bytes()])
 }
 
 #[test]
@@ -277,7 +280,7 @@ fn deposit_accounts() -> [Account; 3] {
 /// The demo's deposit: leaf 7 into the empty tree.
 fn deposit_ix() -> Vec<u8> {
     let (new_root, leaf) = (input(DEPOSIT_INPUTS, 1), input(DEPOSIT_INPUTS, 2));
-    ix(DEPOSIT, &[&leaf, &new_root, DEPOSIT_PROOF])
+    ix(*Deposit::DISCRIMINATOR, &[&leaf, &new_root, DEPOSIT_PROOF])
 }
 
 /// The program's empty root and inputs are the demo's, which is the first deposit
@@ -311,7 +314,7 @@ fn a_deposit_advances_the_tree() {
     // The same proof against the advanced tree: its old root is no longer current.
     assert_eq!(
         run(&deposit_ix(), &mut accounts),
-        custom(PoolError::InvalidProof)
+        custom(ShieldedPoolError::InvalidProof)
     );
 }
 
@@ -384,7 +387,7 @@ fn a_full_tree_takes_no_deposit() {
     accounts[0] = pool(&[EMPTY_ROOT], 1 << TREE_HEIGHT);
     assert_eq!(
         run(&deposit_ix(), &mut accounts),
-        custom(PoolError::TreeFull)
+        custom(ShieldedPoolError::TreeFull)
     );
 }
 
@@ -410,7 +413,7 @@ fn withdraw_accounts() -> [Account; 5] {
 fn withdraw_ix(root: &[u8; 32], fee: u64) -> Vec<u8> {
     let nullifier_hash = input(WITHDRAW_INPUTS, 1);
     ix(
-        WITHDRAW,
+        *Withdraw::DISCRIMINATOR,
         &[WITHDRAW_PROOF, root, &nullifier_hash, &fee.to_le_bytes()],
     )
 }
@@ -446,13 +449,13 @@ fn a_withdrawal_spends_its_nullifier() {
     accounts[1] = Account::new(nullifier, PROGRAM, &[Nullifier::TAG]);
     assert_eq!(
         run(&demo_withdraw_ix(), &mut accounts),
-        custom(PoolError::NullifierSpent)
+        custom(ShieldedPoolError::NullifierSpent)
     );
     // System-owned but holding data, or lamports only (which don't block it).
     accounts[1] = Account::new(nullifier, SYSTEM, &[0]);
     assert_eq!(
         run(&demo_withdraw_ix(), &mut accounts),
-        custom(PoolError::NullifierSpent)
+        custom(ShieldedPoolError::NullifierSpent)
     );
     accounts[1] = Account::new(nullifier, SYSTEM, &[]);
     reaches_creation(run(&demo_withdraw_ix(), &mut accounts));
@@ -464,37 +467,40 @@ fn withdraw_checks_the_statement() {
     let mut accounts = withdraw_accounts();
     assert_eq!(
         run(&withdraw_ix(&root, 1), &mut accounts),
-        custom(PoolError::InvalidProof)
+        custom(ShieldedPoolError::InvalidProof)
     );
     let too_high = withdraw_ix(&root, DENOMINATION + 1);
-    assert_eq!(run(&too_high, &mut accounts), custom(PoolError::FeeTooHigh));
+    assert_eq!(
+        run(&too_high, &mut accounts),
+        custom(ShieldedPoolError::FeeTooHigh)
+    );
     assert_eq!(
         run(&withdraw_ix(&[9; 32], 0), &mut accounts),
-        custom(PoolError::UnknownRoot)
+        custom(ShieldedPoolError::UnknownRoot)
     );
     // An unused ring slot is all zeros, and never a root.
     assert_eq!(
         run(&withdraw_ix(&[0; 32], 0), &mut accounts),
-        custom(PoolError::UnknownRoot)
+        custom(ShieldedPoolError::UnknownRoot)
     );
     // Another recipient, or relayer.
     accounts[2] = Account::new(Address::new_from_array([3; 32]), SYSTEM, &[]);
     assert_eq!(
         run(&demo_withdraw_ix(), &mut accounts),
-        custom(PoolError::InvalidProof)
+        custom(ShieldedPoolError::InvalidProof)
     );
     let mut accounts = withdraw_accounts();
     accounts[3] = Account::wallet(3);
     assert_eq!(
         run(&demo_withdraw_ix(), &mut accounts),
-        custom(PoolError::InvalidProof)
+        custom(ShieldedPoolError::InvalidProof)
     );
     // A root that has left the ring: sixteen deposits since.
     let mut accounts = withdraw_accounts();
     accounts[0] = pool(&[[5; 32]; ROOT_HISTORY_SIZE], 17);
     assert_eq!(
         run(&demo_withdraw_ix(), &mut accounts),
-        custom(PoolError::UnknownRoot)
+        custom(ShieldedPoolError::UnknownRoot)
     );
 }
 
@@ -595,7 +601,7 @@ fn the_payout_is_checked_arithmetic() {
 /// Each error logs its own name: the client tests match them.
 #[test]
 fn errors_log_their_names() {
-    use PoolError::*;
+    use ShieldedPoolError::*;
     for (error, name) in [
         (InvalidProof, "InvalidProof"),
         (UnknownRoot, "UnknownRoot"),
@@ -603,7 +609,11 @@ fn errors_log_their_names() {
         (TreeFull, "TreeFull"),
         (NullifierSpent, "NullifierSpent"),
     ] {
-        assert!(PoolError::message(error as u32).starts_with(&format!("{name}: ")));
+        let logged = ProgramError::from(error).to_str::<ShieldedPoolError>();
+        assert!(logged.starts_with(&format!("{name}: ")));
     }
-    assert_eq!(PoolError::message(0), "unknown error");
+    assert_eq!(
+        ProgramError::Custom(5).to_str::<ShieldedPoolError>(),
+        "Error: Unknown"
+    );
 }

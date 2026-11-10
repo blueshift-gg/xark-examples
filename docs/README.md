@@ -36,5 +36,5 @@ Every example follows the same loop:
 
 xark owns the complete circuit toolchain: Rust subset checking, lowering to R1CS, witness solving,
 Groth16 setup and proving (in Rust and in wasm), verifier export, and client generation. The application still owns the
-public/private contract, wallet-side witness data, trusted-setup ceremony, and on-chain state
+public/private contract, wallet-side witness data, trusted-setup ceremony, and onchain state
 transition around the generated verifier.

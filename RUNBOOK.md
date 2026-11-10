@@ -8,7 +8,7 @@ The reproducible build and deployment path. If a command here disagrees with an 
 | Tool | Version | Install |
 |------|---------|---------|
 | Rust | stable, `1.95.0` pinned | installed from `rust-toolchain.toml` (xark needs 1.89+) |
-| xark CLI | `0.3` | `cargo install xark-cli --version 0.3.0 --locked` |
+| xark CLI | `0.3` | `cargo install xark-cli --version 0.3.1 --locked` |
 | xark crates, `@blueshift-gg/xark` | `0.3` | from crates.io and npm, through the manifests |
 | `cargo-build-sbf` | `4.2.0` | `cargo install cargo-build-sbf --version 4.2.0 --locked` |
 | Node | 22+ | [nodejs.org](https://nodejs.org) |
@@ -16,7 +16,7 @@ The reproducible build and deployment path. If a command here disagrees with an 
 No nightly Rust: xark 0.3 compiles circuits with your stable toolchain.
 
 ```bash
-cargo install xark-cli --version 0.3.0 --locked
+cargo install xark-cli --version 0.3.1 --locked
 npm ci            # one install for every example: the root is an npm workspace
 xark doctor
 ```
@@ -42,6 +42,11 @@ xark export <circuit> --crate-name <name>   # the verifier crate, beside the cir
 xark client <circuit> --out client/         # the typed TypeScript client
 cd program && cargo build-sbf --arch v3     # the program, linking the verifier crate
 ```
+
+`cargo build-sbf` only warns when a function's stack frame passes SBF's 4 KiB ("Function … overflows
+the maximum allowed frame space"), and at run time that frame silently corrupts the stack, so
+`build:program` fails on that warning. It touches `src/lib.rs` first, so the program links again and
+the warning, which cargo doesn't replay from its cache, is seen on every build.
 
 `xark export` bundles a real proof as its crate's self-test, so something must prove first: 01
 runs `xark prove --inputs '{"power_level": 9001}'`; the others run their circuit crate's
@@ -91,9 +96,11 @@ solana program deploy target/deploy/<name>.so
 
 The first deploy takes its program address from `target/deploy/<name>-keypair.json`, which
 `cargo build-sbf` makes if it's missing; keep that keypair (it's ignored by git) to upgrade the same
-program later. No program names its own address: each derives its PDAs from the id the runtime
-passes it, so the same `.so` works at any address. The client tests load each program at an address
-of their own in LiteSVM; a client for a deployed program passes the deployed one instead.
+program later. The programs that own accounts (03 to 06) name their own address, `ID` in
+`program/src/lib.rs`, as Pinocchio programs do, and derive their PDAs and check owners against it: to
+deploy one elsewhere, put that keypair's address in `ID` and in the client, and build again. 01 and
+02 own no accounts and run at any address. The client tests load each program at its `ID` in
+LiteSVM (01 and 02 at an address of their own).
 
 The client tests are the reference clients: each instruction's tag and data layout, account metas,
 PDA seeds, public-input encoding, and the wallet's bookkeeping of notes and paths.
@@ -118,6 +125,6 @@ client to the circuit and key it was made for: `Circuit.prover(url, { digest })`
 3. **Single-writer tree tip.** Deposit and transact proofs bind the current root and append index.
    A wallet or relayer must sequence submissions, refresh pool state immediately before proving,
    and prove again when another append wins the race. A high-throughput product needs a
-   sequencer/batcher or an on-chain append design in front of this reference protocol.
-4. **Note delivery.** Example 05 binds the withdrawal's token account and both encrypted memos'
+   sequencer/batcher or an onchain append design in front of this reference protocol.
+4. **Note delivery.** Example 06 binds the withdrawal's token account and both encrypted memos'
    hashes into the proof; the program recomputes them before verifying.

@@ -1,4 +1,4 @@
-// Prove "over 9000" with the generated client, then verify it on-chain: the
+// Prove "over 9000" with the generated client, then verify it onchain: the
 // instruction data is the proof itself, 256 bytes.
 import { generateKeyPairSigner, type Address, type Instruction } from "@solana/kit";
 import { artifacts, funded, send, vm } from "./harness";
@@ -14,7 +14,7 @@ beforeAll(async () => {
 
 const verify = (data: Uint8Array): Instruction => ({ programAddress: program, data });
 
-test("a proof of 9001 verifies on-chain", async () => {
+test("a proof of 9001 verifies onchain", async () => {
   const proof = prover.prove({ powerLevel: 9001 });
   const svm = vm(program, "program/target/deploy/over_9000_program.so");
   const payer = await funded(svm);
@@ -23,7 +23,9 @@ test("a proof of 9001 verifies on-chain", async () => {
 
   const tampered = proof.toBytes();
   tampered[0] ^= 1;
-  await expect(send(svm, payer, verify(tampered))).rejects.toThrow(/invalid instruction data/);
+  await expect(send(svm, payer, verify(tampered))).rejects.toThrow(/InvalidProof/);
+  // Anything but the 256 bytes is not this instruction.
+  await expect(send(svm, payer, verify(proof.toBytes().slice(1)))).rejects.toThrow(/invalid instruction data/);
 });
 
 test("9000 has no proof", () => {

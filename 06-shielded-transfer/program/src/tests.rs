@@ -2,10 +2,11 @@
 //! proof, and each account check refusing the accounts it exists to refuse. The
 //! checks run before any syscall or CPI, so they run here on fake accounts; the
 //! client's end-to-end test covers the CPIs in LiteSVM.
-use super::*;
-use pinocchio::account::RuntimeAccount;
-
-const PROGRAM: Address = Address::new_from_array([3; 32]);
+use crate::{ID as PROGRAM, errors::ShieldedTransferError, instructions::*, state::*};
+use pinocchio::{AccountView, Address, account::RuntimeAccount, error::ProgramError};
+use pinocchio_token::state::{Account as TokenAccount, Mint};
+use shielded_transfer_transact_xark_verifier::{NUM_PUBLIC_INPUTS, Proof, verify};
+use solana_sha256_hasher::hash;
 const MINT: Address = Address::new_from_array([7; 32]);
 
 /// A fake account: its `RuntimeAccount` header with its data after it, as the
@@ -118,13 +119,14 @@ fn initialize_fakes() -> Vec<Fake> {
 fn initialize_with(change: impl FnOnce(&mut Vec<Fake>)) -> Result<(), ProgramError> {
     let mut fakes = initialize_fakes();
     change(&mut fakes);
-    initialize_accounts(&PROGRAM, &views(&mut fakes)).map(|_| ())
+    InitializeAccounts::try_from(&mut views(&mut fakes)[..]).map(|_| ())
 }
 
 #[test]
 fn initialize_takes_its_accounts() {
     let mut fakes = initialize_fakes();
-    let a = initialize_accounts(&PROGRAM, &views(&mut fakes)).unwrap();
+    let mut views = views(&mut fakes);
+    let a = InitializeAccounts::try_from(&mut views[..]).unwrap();
     assert_eq!(a.pool_bump, pda(&[POOL_SEED, MINT.as_ref()]).1);
     assert_eq!(a.vault_bump, pda(&[VAULT_SEED, MINT.as_ref()]).1);
 }
@@ -311,19 +313,19 @@ fn transact_with(change: impl FnOnce(&mut Vec<Fake>)) -> Result<(), ProgramError
     let mut fakes = transact_fakes();
     change(&mut fakes);
     let data = args_data(5, 5, 0);
-    let args = TransactArgs::parse(&data).unwrap();
-    transact_accounts(&PROGRAM, &views(&mut fakes), &args).map(|_| ())
+    Transact::try_from((&data[..], &mut views(&mut fakes)[..])).map(|_| ())
 }
 
 #[test]
 fn transact_takes_its_accounts() {
     let mut fakes = transact_fakes();
     let data = args_data(5, 5, 0);
-    let args = TransactArgs::parse(&data).unwrap();
-    let a = transact_accounts(&PROGRAM, &views(&mut fakes), &args).unwrap();
+    let mut views = views(&mut fakes);
+    let t = Transact::try_from((&data[..], &mut views[..])).unwrap();
+    let a = &t.accounts;
     assert!(a.user_token.is_some() && a.recipient_token.is_some());
     assert!(a.relayer_token.is_none(), "the program's address is none");
-    for (i, (_, bump)) in a.nullifiers.iter().enumerate() {
+    for (i, bump) in t.nullifier_bumps.iter().enumerate() {
         assert_eq!(*bump, pda(&[NULLIFIER_SEED, MINT.as_ref(), &NF[i]]).1);
     }
 }
@@ -332,7 +334,7 @@ fn transact_takes_its_accounts() {
 fn transact_refuses_bad_accounts() {
     use ProgramError::*;
     let other_mint = Address::new_from_array([8; 32]);
-    let wrong_mint = PoolError::WrongMint.into();
+    let wrong_mint = ShieldedTransferError::WrongMint.into();
     let addr = |f: &mut Fake| *f.view().address();
     let cases: [Case<'_>; 21] = [
         ("too few", Box::new(|f| drop(f.pop())), NotEnoughAccountKeys),
@@ -458,12 +460,12 @@ fn transact_refuses_bad_accounts() {
         (
             "a spent nullifier",
             Box::new(|f| f[3] = Fake::new(addr(&mut f[3]), PROGRAM, false, true, &[])),
-            PoolError::NullifierSpent.into(),
+            ShieldedTransferError::NullifierSpent.into(),
         ),
         (
             "a token account of another mint",
             Box::new(move |f| f[5] = token(addr(&mut f[5]), &other_mint, &MINT)),
-            PoolError::WrongMint.into(),
+            ShieldedTransferError::WrongMint.into(),
         ),
         (
             "a read-only token account",
@@ -507,20 +509,23 @@ fn transact_refuses_bad_accounts() {
 #[test]
 fn transact_parses_exactly_its_arguments() {
     let data = args_data(1, 2, 3);
-    let args = TransactArgs::parse(&data).unwrap();
+    let args = TransactInstructionData::try_from(&data[..]).unwrap();
     assert_eq!((args.vpub_in, args.vpub_out, args.fee), (1, 2, 3));
     assert_eq!(args.memos, [&b"zero"[..], b"one"]);
     assert_eq!(args.nf, [&NF[0], &NF[1]]);
     let err = Err(ProgramError::InvalidInstructionData);
     assert_eq!(
-        TransactArgs::parse(&data[..data.len() - 1]).map(|_| ()),
+        TransactInstructionData::try_from(&data[..data.len() - 1]).map(|_| ()),
         err
     );
     assert_eq!(
-        TransactArgs::parse(&[&data[..], &[0]].concat()).map(|_| ()),
+        TransactInstructionData::try_from(&[&data[..], &[0]].concat()[..]).map(|_| ()),
         err
     );
-    assert_eq!(TransactArgs::parse(&data[..400]).map(|_| ()), err);
+    assert_eq!(
+        TransactInstructionData::try_from(&data[..400]).map(|_| ()),
+        err
+    );
 }
 
 #[test]
@@ -580,7 +585,7 @@ fn the_demo_proof_verifies_against_what_the_program_assembles() {
         for _ in &memos {
             ix.extend_from_slice(&0u32.to_le_bytes());
         }
-        let args = TransactArgs::parse(&ix).unwrap();
+        let args = TransactInstructionData::try_from(&ix[..]).unwrap();
         let mut inputs = public_inputs(pool, &args, recipient, relayer);
         for (i, memo) in memos.iter().enumerate() {
             [inputs[15 + 2 * i], inputs[16 + 2 * i]] = halves(memo);
@@ -605,7 +610,7 @@ fn the_demo_proof_verifies_against_what_the_program_assembles() {
 #[test]
 fn memos_are_bound_by_their_sha256() {
     let data = args_data(0, 0, 0);
-    let args = TransactArgs::parse(&data).unwrap();
+    let args = TransactInstructionData::try_from(&data[..]).unwrap();
     let mut pool_bytes = pool_data();
     let pool = Pool::load_mut(&mut pool_bytes).unwrap();
     let inputs = public_inputs(pool, &args, &[0; 32], &[0; 32]);

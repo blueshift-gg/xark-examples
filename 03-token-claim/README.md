@@ -155,28 +155,35 @@ make another of the same statement.
 
 ## The program
 
-The [program](./program/src/lib.rs) is Pinocchio, as 01's and 02's are, with `pinocchio-token` for
-the SPL calls and plain PDAs for its state. `initialize` stores the root and the mint, and creates
-the vault, a token account the distributor PDA owns, funded with `total` from the authority's
-account. `claim` assembles the public inputs itself and makes one call to the verifier crate `xark
-export` generated:
+The [program](./program/src/) is Pinocchio, as 01's and 02's are, with `pinocchio-token` for the
+SPL calls and plain PDAs for its state. `lib.rs` dispatches on the first byte; each instruction is a
+file under `instructions/`, with its accounts, its instruction data and its logic in their own
+structs, the accounts' checks in their `TryFrom`. The program's address is `ID` in `lib.rs`, which
+the client test deploys it at; the PDAs derive from it and the owner checks are against it.
+`initialize` stores the root, the mint and both
+bumps in the distributor (`state.rs`), and creates the vault, a token account the distributor PDA
+owns, funded with `total` from the authority's account. `claim` checks the vault against the stored
+bump, assembles the public inputs itself and makes one call to the verifier crate `xark export`
+generated:
 
 ```rust
-fn public_inputs(root: &[u8; 32], claimant: &[u8; 32], amount: u64) -> [[u8; 32]; 4] {
+pub fn public_inputs(root: &[u8; 32], claimant: &[u8; 32], amount: u64) -> [[u8; 32]; 4] {
     let [hi, lo] = halves(claimant);
     [*root, hi, lo, field(amount)]
 }
 
-let public_inputs = public_inputs(&root, claimant.address().as_array(), amount);
-if !verify(&Proof::from_le_bytes(proof), &public_inputs) {
-    return Err(ProgramError::InvalidInstructionData);
+let public_inputs = public_inputs(&root, accounts.claimant.address().as_array(), data.amount);
+if !verify(&Proof::from_le_bytes(data.proof), &public_inputs) {
+    return Err(TokenClaimError::InvalidProof.into());
 }
 ```
 
 then creates the receipt and transfers `amount` from the vault to the token account the claimant
 names, signed by the distributor PDA. The root comes from the distributor's account, the claimant
 from the signer, the amount from the instruction: a proof made for another list, another wallet or
-another amount fails. The program's own test checks the demo proof (`examples/demo.rs`) against
+another amount fails. The receipt is the one PDA the program finds rather than derives from a
+stored bump: it must sit at the canonical bump, or a claimant could claim again at another. The
+program's own test checks the demo proof (`examples/demo.rs`) against
 what it assembles, and that another claimant, amount or root fails.
 
 Anyone can send lamports to an address, and the system program's `CreateAccount` refuses one that
@@ -206,7 +213,7 @@ all: the client throws `CheckFailed`, naming `path.root(claim.leaf())`.
 
 | Circuit | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | Onchain CU |
 |---|--:|--:|--:|--:|--:|
-| `token_claim` | 5,437 | 4 | 989 ms | 195 ms | 97,846–103,846 |
+| `token_claim` | 5,437 | 4 | 989 ms | 195 ms | 98,048–104,048 |
 
 Constraints from `xark build` (`xark profile` attributes them: 5,341 to the path and leaf, 96 to the
 `u32` index and `u64` amount checks). Proving in node 22 through the generated client, median of
@@ -221,7 +228,9 @@ the claimant's address. A proof is always 256 bytes.
 circuit/    Claim (the leaf), Path (the tree, for the circuit and the list's builder), the
             circuit, and the demo proof that's the verifier crate's self-test
 client/     the generated client, and the distributor and claimant test
-program/    Pinocchio + SPL: store the root, hold the vault, verify, write the receipt, pay
+program/    Pinocchio + SPL: store the root, hold the vault, verify, write the receipt, pay;
+            lib.rs (dispatch), instructions/{initialize,claim}.rs, state.rs (the distributor),
+            errors.rs (InvalidProof), helpers.rs (account creation, logging)
 ```
 
 ## Deployment boundaries
@@ -265,12 +274,18 @@ integer, as a little-endian field element.
 
 ### Errors
 
+The program's one error of its own is `TokenClaimError::InvalidProof`, custom code 0; the rest are
+built-in `ProgramError`s. The program logs its own error's name; the runtime names the rest.
+
 | Error | When |
 |---|---|
-| `InvalidInstructionData` | the data is malformed, or the proof doesn't verify |
+| `InvalidProof` (custom 0) | the proof doesn't verify for the root, the signer and the amount |
+| `InvalidInstructionData` | the data is malformed, or the first byte is no instruction |
 | `AccountAlreadyInitialized` | the claimant has claimed: the receipt exists |
 | `InvalidSeeds` | an account isn't the PDA it should be |
 | `InvalidAccountData` | the distributor isn't one `initialize` made |
 | `MissingRequiredSignature` | the authority or the claimant didn't sign |
+| `IncorrectProgramId` | the token or the system program isn't the one named |
+| `NotEnoughAccountKeys` | fewer accounts than the instruction names |
 
 Next → [04 · Shielded pool](../04-shielded-pool/): Merkle trees plus salted commitments

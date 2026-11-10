@@ -37,6 +37,10 @@ generated keys or real witness data.
 - Programs build with `cargo build-sbf --arch v3`. The generated verifier crates take
   `xark-verifier` with its default `static-syscalls` feature, which only a v3 program loads; a v0
   build of it fails with "Relative jump out of bounds".
+- `build:program` fails if `cargo build-sbf` reports a function whose stack frame passes SBF's
+  4 KiB, which it only warns about: at run time such a frame silently corrupts the stack (it broke
+  token claim's claims, and 01's entrypoint once had a 4,480-byte frame). Keep large buffers
+  borrowed from the instruction data, or put a heavy function out of line with `#[inline(never)]`.
 - Preserve the explicit dev-key warnings. Production ceremony artifacts do not belong in example
   pull requests.
 

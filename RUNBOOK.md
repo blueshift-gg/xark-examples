@@ -43,6 +43,11 @@ xark client <circuit> --out client/         # the typed TypeScript client
 cd program && cargo build-sbf --arch v3     # the program, linking the verifier crate
 ```
 
+`cargo build-sbf` only warns when a function's stack frame passes SBF's 4 KiB ("Function … overflows
+the maximum allowed frame space"), and at run time that frame silently corrupts the stack, so
+`build:program` fails on that warning. It touches `src/lib.rs` first, so the program links again and
+the warning, which cargo doesn't replay from its cache, is seen on every build.
+
 `xark export` bundles a real proof as its crate's self-test, so something must prove first: 01
 runs `xark prove --inputs '{"power_level": 9001}'`; the others run their circuit crate's
 `examples/demo.rs`, which builds the inputs with the circuit's own Rust (a commitment, a Merkle

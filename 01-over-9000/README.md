@@ -98,6 +98,7 @@ and `src/lib.rs`:
 
 ```rust
 #![no_std]
+use over_9000_verifier::{Proof, verify};
 use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError, program_entrypoint};
 
 program_entrypoint!(process_instruction);
@@ -105,11 +106,11 @@ pinocchio::nostd_panic_handler!();
 pinocchio::no_allocator!();
 
 fn process_instruction(_: &Address, _: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    if data.len() == 256 && over_9000_verifier::verify_instruction_data(data) {
-        Ok(())
-    } else {
-        Err(ProgramError::InvalidInstructionData)
+    let proof: &[u8; 256] = data.try_into().map_err(|_| ProgramError::InvalidInstructionData)?;
+    if !verify(&Proof::from_le_bytes(proof), &[]) {
+        return Err(ProgramError::InvalidInstructionData);
     }
+    Ok(())
 }
 ```
 
@@ -156,7 +157,7 @@ console.log(result instanceof FailedTransactionMetadata ? `failed: ${result.err(
 ```
 
 ```bash
-npx tsx prove.ts    # verified on-chain in 74355 CU
+npx tsx prove.ts    # verified on-chain in 75948 CU
 ```
 
 That's the whole loop: change the circuit, rerun steps 1–2 and rebuild, and the client and the

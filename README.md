@@ -77,7 +77,7 @@ its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
 
 | Circuit | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | On-chain CU |
 |---|--:|--:|--:|--:|--:|
-| 01 `over_9000` | 128 | 0 | 20 ms | 9 ms | 73,912 |
+| 01 `over_9000` | 128 | 0 | 20 ms | 9 ms | 75,916 |
 | 02 `zkyc` | 1,350 | 5 | 211 ms | 70 ms | 100,204 |
 | 03 `shielded_pool_deposit` | 9,647 | 4 | 1,635 ms | 403 ms | 96,766–97,349 |
 | 03 `shielded_pool_withdraw` | 5,382 | 7 | 920 ms | 180 ms | 119,607 |

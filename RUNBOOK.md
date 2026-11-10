@@ -8,7 +8,7 @@ The reproducible build and deployment path. If a command here disagrees with an 
 | Tool | Version | Install |
 |------|---------|---------|
 | Rust | stable, `1.95.0` pinned | installed from `rust-toolchain.toml` (xark needs 1.89+) |
-| xark CLI | `0.3` | `cargo install xark-cli --version 0.3.0 --locked` |
+| xark CLI | `0.3` | `cargo install xark-cli --version 0.3.1 --locked` |
 | xark crates, `@blueshift-gg/xark` | `0.3` | from crates.io and npm, through the manifests |
 | `cargo-build-sbf` | `4.2.0` | `cargo install cargo-build-sbf --version 4.2.0 --locked` |
 | Node | 22+ | [nodejs.org](https://nodejs.org) |
@@ -16,7 +16,7 @@ The reproducible build and deployment path. If a command here disagrees with an 
 No nightly Rust: xark 0.3 compiles circuits with your stable toolchain.
 
 ```bash
-cargo install xark-cli --version 0.3.0 --locked
+cargo install xark-cli --version 0.3.1 --locked
 npm ci            # one install for every example: the root is an npm workspace
 xark doctor
 ```

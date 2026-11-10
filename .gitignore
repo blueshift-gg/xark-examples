@@ -19,6 +19,8 @@ Cargo.lock
 !04-shielded-pool/circuits/pool/Cargo.lock
 !04-shielded-pool/circuits/withdraw/Cargo.lock
 !04-shielded-pool/program/Cargo.lock
+!05-anonymous-voting/circuit/Cargo.lock
+!05-anonymous-voting/program/Cargo.lock
 !05-shielded-transfer/circuits/transact/Cargo.lock
 !05-shielded-transfer/program/Cargo.lock
 

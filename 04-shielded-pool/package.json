@@ -1,0 +1,26 @@
+{
+  "name": "shielded-pool",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:circuits && npm run build:program",
+    "build:circuits": "npm run build:deposit && npm run build:withdraw",
+    "build:deposit": "xark --version | grep -q '^xark 0\\.3\\.' || { echo 'needs xark 0.3: see ../RUNBOOK.md' >&2; exit 1; }; xark build circuits/deposit && xark setup circuits/deposit --r1cs-form reduced && (cd circuits/deposit && cargo run -q --release --example demo) && xark export circuits/deposit --crate-name shielded-pool-deposit-xark-verifier && xark client circuits/deposit --out client/",
+    "build:withdraw": "xark --version | grep -q '^xark 0\\.3\\.' || { echo 'needs xark 0.3: see ../RUNBOOK.md' >&2; exit 1; }; xark build circuits/withdraw && xark setup circuits/withdraw --r1cs-form reduced && (cd circuits/withdraw && cargo run -q --release --example demo) && xark export circuits/withdraw --crate-name shielded-pool-withdraw-xark-verifier && xark client circuits/withdraw --out client/",
+    "build:program": "cd program && cargo build-sbf --arch v3",
+    "test:circuit": "(cd circuits/pool && cargo test --release) && xark test circuits/deposit && xark test circuits/withdraw && cd program && cargo test -q --release",
+    "test": "tsc --noEmit && vitest run",
+    "fmt:check": "for m in $(git ls-files '*Cargo.toml'); do cargo fmt --check --manifest-path $m || exit 1; done",
+    "clippy": "for m in $(git ls-files '*Cargo.toml'); do cargo clippy --manifest-path $m --workspace --all-targets --locked -- -D warnings || exit 1; done",
+    "check:clients": "git diff --exit-code -- client/ && test -z \"$(git status --porcelain -- client/)\"",
+    "clean": "rm -rf circuits/*/target program/target"
+  },
+  "devDependencies": {
+    "@blueshift-gg/xark": "^0.3.0",
+    "@solana/kit": "^8.5.0",
+    "@types/node": "^22.0.0",
+    "litesvm": "^1.6.1",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,8 +1,12 @@
 # 01 · Over 9000: a range proof
 
-Prove you know a secret number greater than 9000, revealing nothing else. It's the smallest circuit
-that still does something real, the range-proof mechanism under every later example, and the whole
-xark loop in miniature: Rust circuit → Solana verifier → TypeScript client → proof on-chain.
+Prove you know a secret number greater than 9000, revealing nothing else. It teaches the **range
+proof**. A circuit computes in a prime field, which has no "less than": arithmetic wraps at `p`, so
+`0 − 1` is the largest value there is. To compare numbers, the circuit first proves they're small,
+by splitting each into bits and checking every bit; then order means what it should. That trick is
+under every age, balance and price check in the later examples. This is the smallest circuit that
+still does something real, and the whole xark loop in miniature: Rust circuit → Solana verifier →
+TypeScript client → proof onchain.
 
 ## The circuit
 
@@ -49,14 +53,15 @@ The [program](./program/src/lib.rs) is one call to the verifier crate `xark expo
 
 It proves someone knows *a* value `> 9000`. It doesn't tie that value to anything: a prover just
 picks 9001. A bare range proof is a mechanism, not an application. Bind the hidden value to a
-published commitment ([02](../02-age-verification/)) or a Merkle tree of deposits
-([03](../03-shielded-pool/)) and the same check becomes an age gate or a private balance.
+published commitment ([02](../02-zkyc/)) or a Merkle tree of deposits
+([04](../04-shielded-pool/)) and the same check becomes a KYC gate or a private balance.
 
 ## Run it
 
 ```bash
-just test           # circuit → key → verifier crate → client → .so, then the client test
-just test-circuit   # the circuit's Rust tests: 9001 passes, 9000 doesn't
+npm run build          # circuit → key → verifier crate → client → .so
+npm run test:circuit   # the circuit's Rust tests: 9001 passes, 9000 doesn't
+npm test               # prove with the client, verify onchain (LiteSVM)
 ```
 
 Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks the Rust and xark side).
@@ -98,6 +103,7 @@ and `src/lib.rs`:
 
 ```rust
 #![no_std]
+use over_9000_verifier::{Proof, verify};
 use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError, program_entrypoint};
 
 program_entrypoint!(process_instruction);
@@ -105,11 +111,11 @@ pinocchio::nostd_panic_handler!();
 pinocchio::no_allocator!();
 
 fn process_instruction(_: &Address, _: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    if data.len() == 256 && over_9000_verifier::verify_instruction_data(data) {
-        Ok(())
-    } else {
-        Err(ProgramError::InvalidInstructionData)
+    let proof: &[u8; 256] = data.try_into().map_err(|_| ProgramError::InvalidInstructionData)?;
+    if !verify(&Proof::from_le_bytes(proof), &[]) {
+        return Err(ProgramError::InvalidInstructionData);
     }
+    Ok(())
 }
 ```
 
@@ -156,19 +162,19 @@ console.log(result instanceof FailedTransactionMetadata ? `failed: ${result.err(
 ```
 
 ```bash
-npx tsx prove.ts    # verified on-chain in 74355 CU
+npx tsx prove.ts    # verified on-chain in 75948 CU
 ```
 
 That's the whole loop: change the circuit, rerun steps 1–2 and rebuild, and the client and the
-verifier follow it. This directory's `justfile` runs the same steps, with its key from `xark setup`.
+verifier follow it. This directory's `npm run build` runs the same steps, with its key from `xark setup`.
 
 ## Layout
 
 ```
-circuit/   the circuit crate: src/lib.rs, plain Rust, with its tests
-client/    the generated TypeScript client, and its test: prove, then verify on-chain
-program/   Pinocchio verifier: one verify call, minimal CU
-justfile   build · test · test-circuit
+circuit/       the circuit crate: src/lib.rs, plain Rust, with its tests
+client/        the generated TypeScript client, and its test: prove, then verify onchain
+program/       Pinocchio verifier: one verify call, minimal CU
+package.json   build · test:circuit · test
 ```
 
-Next → [02 · Age verification](../02-age-verification/)
+Next → [02 · zKYC](../02-zkyc/): range proofs put to work

@@ -1,11 +1,11 @@
 //! On-chain verifier for the "over 9000" circuit (Pinocchio, no_std, minimal CU).
 //! Instruction data is the 256-byte proof: the circuit has no public inputs.
-//! `verify_instruction_data` comes from the crate `xark export` generated and
-//! checks the proof via the alt_bn128 syscalls. It measures 73,912 CU here, 1,884
-//! fewer than the typed `verify(&Proof::from_le_bytes(..), &[])`.
+//! `verify` comes from the crate `xark export` generated and checks the proof via
+//! the alt_bn128 syscalls; its public inputs are a `[[u8; 32]; N]`, so their number
+//! is checked when the program compiles.
 #![cfg_attr(not(test), no_std)]
 
-use over_9000_xark_verifier::verify_instruction_data;
+use over_9000_xark_verifier::{Proof, verify};
 use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError, program_entrypoint};
 
 program_entrypoint!(process_instruction);
@@ -20,9 +20,11 @@ fn process_instruction(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // The proof and nothing else.
-    if instruction_data.len() == 256 && verify_instruction_data(instruction_data) {
-        Ok(())
-    } else {
-        Err(ProgramError::InvalidInstructionData)
+    let proof: &[u8; 256] = instruction_data
+        .try_into()
+        .map_err(|_| ProgramError::InvalidInstructionData)?;
+    if !verify(&Proof::from_le_bytes(proof), &[]) {
+        return Err(ProgramError::InvalidInstructionData);
     }
+    Ok(())
 }

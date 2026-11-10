@@ -2,57 +2,151 @@ name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+# A newer push to the same branch or pull request makes the older run moot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  # The Rust toolchain itself is pinned in rust-toolchain.toml (1.95.0, with the
+  # wasm32 target); these are the tools installed beside it.
+  CARGO_BUILD_SBF_VERSION: 4.2.0
+  XARK_CLI_VERSION: 0.3.0
 
 jobs:
-  test:
+  # Neither tool has a prebuilt binary that cargo-binstall (or install-action, which
+  # falls back to it) can find: no binstall metadata, nothing on quickinstall. Both
+  # build from source, which takes minutes, so they build here once, and every
+  # example's job restores them from this cache.
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cached tools
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-build-sbf
+            ~/.cargo/bin/xark
+          key: tools-${{ runner.os }}-sbf-${{ env.CARGO_BUILD_SBF_VERSION }}-xark-${{ env.XARK_CLI_VERSION }}
+
+      - name: Build cargo-build-sbf and xark
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          rustup toolchain install
+          cargo install cargo-build-sbf --version "$CARGO_BUILD_SBF_VERSION" --locked
+          cargo install xark-cli --version "$XARK_CLI_VERSION" --locked
+
+  example:
+    needs: tools
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      # One example failing says nothing about the others: let each report.
+      fail-fast: false
+      matrix:
+        include:
+          - example: 01-over-9000
+            workspaces: |
+              01-over-9000/circuit
+              01-over-9000/program
+          - example: 02-zkyc
+            workspaces: |
+              02-zkyc/circuit
+              02-zkyc/program
+          - example: 03-token-claim
+            workspaces: |
+              03-token-claim/circuit
+              03-token-claim/program
+          - example: 04-shielded-pool
+            workspaces: |
+              04-shielded-pool/circuits/deposit
+              04-shielded-pool/circuits/pool
+              04-shielded-pool/circuits/withdraw
+              04-shielded-pool/program
+          - example: 05-shielded-transfer
+            workspaces: |
+              05-shielded-transfer/circuits/transact
+              05-shielded-transfer/program
+    name: ${{ matrix.example }}
     defaults:
       run:
-        working-directory: xark-examples
+        working-directory: ${{ matrix.example }}
     steps:
-      - name: Check out examples
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      # With no arguments, rustup installs what rust-toolchain.toml names.
+      - name: Rust toolchain
+        working-directory: .
+        run: rustup toolchain install
+
+      - name: Tools
+        uses: actions/cache/restore@v4
         with:
-          path: xark-examples
+          path: |
+            ~/.cargo/bin/cargo-build-sbf
+            ~/.cargo/bin/xark
+          key: tools-${{ runner.os }}-sbf-${{ env.CARGO_BUILD_SBF_VERSION }}-xark-${{ env.XARK_CLI_VERSION }}
+          fail-on-cache-miss: true
+
+      # The tools come from their own cache above, so this one leaves ~/.cargo/bin
+      # alone. Each example's crates are their own workspaces, with their own
+      # targets.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.example }}
+          workspaces: ${{ matrix.workspaces }}
+          cache-bin: false
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Install tools
+      # One install for every example: the root is an npm workspace.
+      - name: npm packages
+        working-directory: .
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt --target wasm32-unknown-unknown
-          cargo install just --version 1.43.1 --locked
-          cargo install cargo-build-sbf --version 4.2.0 --locked
-
-      - name: Install xark 0.3 and the npm packages
-        run: |
-          cargo install xark-cli --version 0.3.0 --locked
-          xark --version | grep -E '^xark 0\.3\.'
           npm ci
           xark doctor
 
-      - name: Build, then prove with the clients and verify on-chain (LiteSVM)
-        run: just test
+      - name: Build circuits, keys, verifier crates, clients and program
+        id: build
+        run: npm run build
 
-      # After the build: the programs' manifests name the generated verifier crates.
+      # The steps after the build report on their own: a stale client doesn't hide a
+      # failing test. Without a build, none of them has anything to check.
+      - name: Committed clients are current
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: npm run check:clients
+
+      - name: Circuit and program tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: npm run test:circuit
+
+      - name: Prove with the client and verify onchain (LiteSVM)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: npm test
+
+      # Formatting and clippy run here rather than in a lint job of their own: the
+      # programs' manifests name the verifier crates the build generates, so cargo
+      # can't even read them before it. A lint job would make every key, demo proof
+      # and verifier crate a second time; here they already exist, and a lint
+      # failure is reported against its example.
       - name: Formatting
-        if: ${{ !cancelled() }} # each check reports on its own
-        run: just fmt-check
-
-      - name: Circuit tests
-        if: ${{ !cancelled() }} # each check reports on its own
-        run: just test-circuits
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: npm run fmt:check
 
       - name: Clippy
-        if: ${{ !cancelled() }} # each check reports on its own
-        run: just clippy
-
-      - name: Committed clients are current
-        if: ${{ !cancelled() }} # each check reports on its own
-        run: just check-clients
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: npm run clippy

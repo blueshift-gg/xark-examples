@@ -1,7 +1,7 @@
 //! The "hello world" of ZK range proofs: prove a secret value is greater than
 //! 9000 without revealing it. The `u64` suffix supplies the comparison width,
 //! and Xark enforces that range in-circuit. There are no public inputs: `9000`
-//! is baked into the verifying key, so the on-chain proof is exactly 256 bytes.
+//! is baked into the verifying key, so the onchain proof is exactly 256 bytes.
 use xark::prelude::*;
 
 #[circuit]

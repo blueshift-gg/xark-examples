@@ -3,7 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "tsc --noEmit && vitest run"
+    "build": "npm run build:circuit && npm run build:program",
+    "build:circuit": "xark --version | grep -q '^xark 0\\.3\\.' || { echo 'needs xark 0.3: see ../RUNBOOK.md' >&2; exit 1; }; xark build circuit && xark setup circuit --r1cs-form reduced && xark prove circuit --inputs '{\"power_level\": 9001}' && xark export circuit --crate-name over-9000-xark-verifier && xark client circuit --out client/",
+    "build:program": "cd program && cargo build-sbf --arch v3",
+    "test:circuit": "xark test circuit",
+    "test": "tsc --noEmit && vitest run",
+    "fmt:check": "for m in $(git ls-files '*Cargo.toml'); do cargo fmt --check --manifest-path $m || exit 1; done",
+    "clippy": "for m in $(git ls-files '*Cargo.toml'); do cargo clippy --manifest-path $m --workspace --all-targets --locked -- -D warnings || exit 1; done",
+    "check:clients": "git diff --exit-code -- client/ && test -z \"$(git status --porcelain -- client/)\"",
+    "clean": "rm -rf circuit/target program/target"
   },
   "devDependencies": {
     "@blueshift-gg/xark": "^0.3.0",

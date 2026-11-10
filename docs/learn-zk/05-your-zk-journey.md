@@ -7,22 +7,28 @@ path from this repository to designing a private Solana application.
 
 **Step 1 - Run example 01.**
 Build a Rust range circuit, export its verifier, prove with its generated TypeScript client, and
-verify on-chain in LiteSVM. The goal is to understand the build -> setup -> export -> client ->
-on-chain loop.
+verify onchain in LiteSVM. The goal is to understand the build -> setup -> export -> client ->
+onchain loop, and the range proof itself: a prime field has no order, so a circuit compares numbers
+by decomposing them into bits.
 
 **Step 2 - Learn xark's Rust circuit subset.**
 Start with `Private<Field>`, `Public<Field>`, `#[input]` structs, sized comparisons, arrays, fixed loops,
 and `require*`. Use `xark check` continuously: an unsupported Rust construct should be redesigned,
 not worked around.
 
-**Step 3 - Build with commitments.**
-[Example 02](../../02-age-verification/) turns a bare range proof into a claim about a specific
-committed value. Most useful ZK applications need this kind of binding.
+**Step 3 - Put range proofs to work, with commitments.**
+[Example 02, zKYC](../../02-zkyc/) turns a bare range proof into a claim about a specific
+committed identity, checked against a policy the program picks: range proofs for the age and the net
+worth, an allow-list that hides which country, and a salted commitment that reveals nothing. Most
+useful ZK applications need this kind of binding.
 
-**Step 4 - Study stateful privacy.**
-[Example 03](../../03-shielded-pool/) adds Merkle membership, nullifiers, recent roots, and real
-on-chain state. [Example 04](../../04-shielded-transfer/) adds private values, keys, SPL tokens, and
-encrypted note delivery.
+**Step 4 - Merkle trees, then stateful privacy.**
+[Example 03](../../03-token-claim/) brings Merkle trees into the circuit: a leaf of address and
+amount, the path a private input, membership in a list of a million in the same 256-byte proof.
+[Example 04](../../04-shielded-pool/) puts 02's salted commitments in that tree and adds nullifiers,
+recent roots, and a tree the program grows onchain. [Example 05](../../05-shielded-transfer/) brings
+range proofs back: private values of any amount, each range-checked so the balance can't wrap the
+field, with keys, SPL tokens, and encrypted note delivery.
 
 **Step 5 - Design the application contract first.**
 Write down what is public, what is private, who vouches for each public value, how proofs become

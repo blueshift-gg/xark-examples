@@ -1,7 +1,7 @@
 # RUNBOOK - from zero to a verified proof
 
 The reproducible build and deployment path. If a command here disagrees with an example's
-`justfile`, the `justfile` is authoritative.
+`package.json` scripts, the scripts are authoritative: CI runs them.
 
 ## 1. Toolchain
 
@@ -12,8 +12,6 @@ The reproducible build and deployment path. If a command here disagrees with an 
 | xark crates, `@blueshift-gg/xark` | `0.3` | from crates.io and npm, through the manifests |
 | `cargo-build-sbf` | `4.2.0` | `cargo install cargo-build-sbf --version 4.2.0 --locked` |
 | Node | 22+ | [nodejs.org](https://nodejs.org) |
-| `just` | `1.43.1` | `cargo install just --version 1.43.1 --locked` |
-| Anchor, for deploy only | `1.1.2` | `avm install 1.1.2 && avm use 1.1.2` |
 
 No nightly Rust: xark 0.3 compiles circuits with your stable toolchain.
 
@@ -34,7 +32,7 @@ solana airdrop 2
 
 ## 2. One example's pipeline
 
-Each example's `just build` runs the same steps:
+Each example's `npm run build` runs the same steps:
 
 ```bash
 xark build <circuit>                        # Rust → wasm → R1CS: target/xark/<name>/
@@ -63,33 +61,42 @@ program assembles them in. `xark profile <circuit> --html` attributes every cons
 From the repository root:
 
 ```bash
-just fmt-check
-just test-circuits   # every circuit's own Rust tests
-just test            # build everything, then npm test: tsc + every client test, per example
-just clippy
-just check-clients   # the committed clients are current
+npm ci
+npm run build           # every example: circuits, keys, verifier crates, clients, programs
+npm run check:clients   # the committed clients are the ones the build generated
+npm run test:circuit    # every circuit's own Rust tests, then the programs' host tests
+npm test                # tsc + every client test, per example
+npm run fmt:check       # after the build: the programs' manifests name the verifier crates
+npm run clippy
 ```
 
-`just test` is the end-to-end test: each example's client proves in node through `@blueshift-gg/xark`, and
+Each runs the script of the same name in every example, in order; `cd <example>` and the same
+command runs just that one. CI ([`ci.yml`](./.github/workflows/ci.yml)) runs these steps in each
+example's directory, one job per example.
+
+`npm test` is the end-to-end test: each example's client proves in node through `@blueshift-gg/xark`, and
 the proof goes in a transaction to the example's program in LiteSVM (in-process, with the real
 `alt_bn128` syscalls; no validator or network).
 
 ## 4. Deploying a program
 
-```bash
-# Examples 01 and 02
-cd program
-cargo build-sbf --arch v3
-solana program deploy target/deploy/<name>.so
+Every program is Pinocchio: one `.so`, with no framework and no IDL. After the example's
+`npm run build`, which generates the verifier crates the program links:
 
-# Examples 03 and 04
-cd program
-cargo build-sbf --arch v3
-anchor deploy
+```bash
+cd <example>/program
+cargo build-sbf --arch v3                   # target/deploy/<name>.so and <name>-keypair.json
+solana program deploy target/deploy/<name>.so
 ```
 
-The client tests are the reference clients: exact Anchor discriminators, account metas, PDA seeds,
-public-input encoding, and the wallet's bookkeeping of notes and paths.
+The first deploy takes its program address from `target/deploy/<name>-keypair.json`, which
+`cargo build-sbf` makes if it's missing; keep that keypair (it's ignored by git) to upgrade the same
+program later. No program names its own address: each derives its PDAs from the id the runtime
+passes it, so the same `.so` works at any address. The client tests load each program at an address
+of their own in LiteSVM; a client for a deployed program passes the deployed one instead.
+
+The client tests are the reference clients: each instruction's tag and data layout, account metas,
+PDA seeds, public-input encoding, and the wallet's bookkeeping of notes and paths.
 
 ## 5. Trusted setup
 
@@ -112,5 +119,5 @@ client to the circuit and key it was made for: `Circuit.prover(url, { digest })`
    A wallet or relayer must sequence submissions, refresh pool state immediately before proving,
    and prove again when another append wins the race. A high-throughput product needs a
    sequencer/batcher or an on-chain append design in front of this reference protocol.
-4. **Note delivery.** Example 04 binds the withdrawal's token account and both encrypted memos'
+4. **Note delivery.** Example 05 binds the withdrawal's token account and both encrypted memos'
    hashes into the proof; the program recomputes them before verifying.

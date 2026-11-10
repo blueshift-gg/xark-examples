@@ -1,4 +1,4 @@
-# Build artifacts (regenerate with `just build`)
+# Build artifacts (regenerate with `npm run build`)
 **/target/
 node_modules/
 *.gz
@@ -11,18 +11,16 @@ node_modules/
 Cargo.lock
 !01-over-9000/circuit/Cargo.lock
 !01-over-9000/program/Cargo.lock
-!02-age-verification/circuit/Cargo.lock
-!02-age-verification/program/Cargo.lock
-!03-shielded-pool/circuits/deposit/Cargo.lock
-!03-shielded-pool/circuits/pool/Cargo.lock
-!03-shielded-pool/circuits/withdraw/Cargo.lock
-!03-shielded-pool/program/Cargo.lock
-!04-shielded-transfer/circuits/transact/Cargo.lock
-!04-shielded-transfer/program/Cargo.lock
-
-# Anchor
-.anchor/
-test-ledger/
+!02-zkyc/circuit/Cargo.lock
+!02-zkyc/program/Cargo.lock
+!03-token-claim/circuit/Cargo.lock
+!03-token-claim/program/Cargo.lock
+!04-shielded-pool/circuits/deposit/Cargo.lock
+!04-shielded-pool/circuits/pool/Cargo.lock
+!04-shielded-pool/circuits/withdraw/Cargo.lock
+!04-shielded-pool/program/Cargo.lock
+!05-shielded-transfer/circuits/transact/Cargo.lock
+!05-shielded-transfer/program/Cargo.lock
 
 # Keys & secrets — never commit
 *-keypair.json

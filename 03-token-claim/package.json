@@ -1,0 +1,25 @@
+{
+  "name": "token-claim",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:circuit && npm run build:program",
+    "build:circuit": "xark --version | grep -q '^xark 0\\.3\\.' || { echo 'needs xark 0.3: see ../RUNBOOK.md' >&2; exit 1; }; xark build circuit && xark setup circuit --r1cs-form reduced && (cd circuit && cargo run -q --release --example demo) && xark export circuit --crate-name token-claim-xark-verifier && xark client circuit --out client/",
+    "build:program": "cd program && cargo build-sbf --arch v3",
+    "test:circuit": "xark test circuit && cd program && cargo test -q --release",
+    "test": "tsc --noEmit && vitest run",
+    "fmt:check": "for m in $(git ls-files '*Cargo.toml'); do cargo fmt --check --manifest-path $m || exit 1; done",
+    "clippy": "for m in $(git ls-files '*Cargo.toml'); do cargo clippy --manifest-path $m --workspace --all-targets --locked -- -D warnings || exit 1; done",
+    "check:clients": "git diff --exit-code -- client/ && test -z \"$(git status --porcelain -- client/)\"",
+    "clean": "rm -rf circuit/target program/target"
+  },
+  "devDependencies": {
+    "@blueshift-gg/xark": "^0.3.0",
+    "@solana-program/token": "^0.16.1",
+    "@solana/kit": "^8.5.0",
+    "@types/node": "^22.0.0",
+    "litesvm": "^1.6.1",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.7"
+  }
+}

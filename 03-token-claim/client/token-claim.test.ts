@@ -115,14 +115,14 @@ test("a claimant on the list claims their amount, once, for their wallet only", 
   const bobToken = await tokenAccount(c.svm, c.mint, bob.address, 0n);
 
   // Another amount, or another signer: the program fills both in, and the proof fails.
-  await expect(send(c.svm, bob, await claim(drop, bob, bobToken, proof, 1_001n))).rejects.toThrow(/invalid instruction data/);
+  await expect(send(c.svm, bob, await claim(drop, bob, bobToken, proof, 1_001n))).rejects.toThrow(/InvalidProof/);
   const mallory = await funded(c.svm);
   const malloryToken = await tokenAccount(c.svm, c.mint, mallory.address, 0n);
-  await expect(send(c.svm, mallory, await claim(drop, mallory, malloryToken, proof, 1_000n))).rejects.toThrow(/invalid instruction data/);
+  await expect(send(c.svm, mallory, await claim(drop, mallory, malloryToken, proof, 1_000n))).rejects.toThrow(/InvalidProof/);
   // Another list, with Bob on it for the same amount: its root isn't the proof's.
   const other = list([claims[1], { claimant: bytes(mallory.address), amount: 750 }]);
   const otherDrop = await distribute(c, other.root, 1_750n);
-  await expect(send(c.svm, bob, await claim(otherDrop, bob, bobToken, proof, 1_000n))).rejects.toThrow(/invalid instruction data/);
+  await expect(send(c.svm, bob, await claim(otherDrop, bob, bobToken, proof, 1_000n))).rejects.toThrow(/InvalidProof/);
 
   const result = await send(c.svm, bob, await claim(drop, bob, bobToken, proof, 1_000n));
   console.log(`token_claim: a claim uses ${result.computeUnitsConsumed()} compute units`);

@@ -1308,6 +1308,8 @@ dependencies = [
 [[package]]
 name = "xark"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c76f7a2839e5b867e74d20c468dfab465d7b505c84a5402e6278964402be66a"
 dependencies = [
  "ark-bn254",
  "ark-ff",
@@ -1322,6 +1324,8 @@ dependencies = [
 [[package]]
 name = "xark-groth16"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c017d24faf6613ce7c6d173aaca60892ca0b07a303375c846ee79cc8b571b619"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -1338,6 +1342,8 @@ dependencies = [
 [[package]]
 name = "xark-hash"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69db572663fb539855866e6068977f7233545bcb13753d5bf9bf2860fc991de8"
 dependencies = [
  "xark",
 ]
@@ -1345,6 +1351,8 @@ dependencies = [
 [[package]]
 name = "xark-ir"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3e669a289b9404b638879df7c6e15a816d733090632c0c6b54fbca325c2e34f"
 dependencies = [
  "ark-bn254",
  "ark-ff",
@@ -1359,6 +1367,8 @@ dependencies = [
 [[package]]
 name = "xark-macros"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3bdd065c53f8823f9ca659e758e6c5ea4c323e709ddb360163d0e0f674eb4e2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1368,6 +1378,8 @@ dependencies = [
 [[package]]
 name = "xark-poseidon2"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9911e45b97faffedc0cd5e13360c06d8e57378609f4e679ee7fb0896c4496ee"
 dependencies = [
  "ark-bn254",
  "ark-ff",
@@ -1377,6 +1389,8 @@ dependencies = [
 [[package]]
 name = "xark-prover"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e75496118452f5533ff2bc84b6d753ba913a2707dfc83b0ed744d24f406af52"
 dependencies = [
  "ark-bn254",
  "ark-ff",
@@ -1392,6 +1406,8 @@ dependencies = [
 [[package]]
 name = "xark-schema"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a30b7f8bf2b7296aab0e5d4c704bef3e9f2f8b1106d092a7a47afc3e27b46f5"
 dependencies = [
  "ark-bn254",
  "ark-ff",
@@ -1402,6 +1418,8 @@ dependencies = [
 [[package]]
 name = "xark-verifier"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20afcc210f41a1b9681c46466a246592b0cc6a351e70edb1888236209bcbec7e"
 dependencies = [
  "solana-nostd-alt-bn128",
  "solana-program-error",

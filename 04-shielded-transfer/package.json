@@ -6,7 +6,7 @@
     "test": "tsc --noEmit && vitest run"
   },
   "devDependencies": {
-    "@blueshift-gg/xark": "file:../../xark/crates/wasm",
+    "@blueshift-gg/xark": "^0.3.0",
     "@solana-program/compute-budget": "^0.20.0",
     "@solana-program/token": "^0.16.1",
     "@solana/kit": "^8.5.0",

@@ -9,7 +9,7 @@ publish = false
 [workspace]
 
 [dependencies]
-xark = { path = "../../../../xark/crates/lang", version = "0.3.0" }
+xark = "0.3"
 pool = { path = "../pool" }
 
 [lints.rust]

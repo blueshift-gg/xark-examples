@@ -8,9 +8,8 @@ The reproducible build and deployment path. If a command here disagrees with an 
 | Tool | Version | Install |
 |------|---------|---------|
 | Rust | stable, `1.95.0` pinned | installed from `rust-toolchain.toml` (xark needs 1.89+) |
-| xark CLI and crates | `0.3.0` (sibling checkout) | below |
-| `@blueshift-gg/xark` | `0.3.0` (sibling checkout) | below |
-| `wasm-pack` | `0.15.0` | `cargo install wasm-pack --version 0.15.0 --locked` |
+| xark CLI | `0.3` | `cargo install xark-cli --version 0.3.0 --locked` |
+| xark crates, `@blueshift-gg/xark` | `0.3` | from crates.io and npm, through the manifests |
 | `cargo-build-sbf` | `4.2.0` | `cargo install cargo-build-sbf --version 4.2.0 --locked` |
 | Node | 22+ | [nodejs.org](https://nodejs.org) |
 | `just` | `1.43.1` | `cargo install just --version 1.43.1 --locked` |
@@ -18,20 +17,11 @@ The reproducible build and deployment path. If a command here disagrees with an 
 
 No nightly Rust: xark 0.3 compiles circuits with your stable toolchain.
 
-Until xark 0.3.0 is published, keep `xark` (at the master commit CI's `ref` names) and
-`xark-examples` as sibling checkouts. The circuit crates depend on it by
-`path = ..., version = "0.3.0"`, the programs `[patch]` the generated verifier's `xark-verifier`
-to it, and each example's `package.json` takes `@blueshift-gg/xark` from it:
-
 ```bash
-cargo install --path ../xark/crates/cli --locked
-wasm-pack build ../xark/crates/wasm --target nodejs --release --out-dir dist/node
+cargo install xark-cli --version 0.3.0 --locked
 npm ci            # one install for every example: the root is an npm workspace
 xark doctor
 ```
-
-When 0.3.0 ships: drop the `path`s and the `[patch.crates-io]` sections, point each `package.json` at
-`^0.3.0`, regenerate the lockfiles, and run the full suite.
 
 For devnet deployment, also install the Agave CLI from the
 [official Anza instructions](https://docs.anza.xyz/cli/install), then create and fund a wallet:

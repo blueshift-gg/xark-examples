@@ -63,9 +63,7 @@ Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks the Rust and
 
 ## Build it yourself, from `xark init`
 
-The same example from nothing, in four steps. Every command below was run as written. (Until xark
-0.3.0 is on crates.io and npm, point `xark` and `@blueshift-gg/xark` at a checkout, as
-[RUNBOOK.md](../RUNBOOK.md) §1 does.)
+The same example from nothing, in four steps. Every command below was run as written.
 
 **1. The circuit.** `xark init` scaffolds a circuit crate, wired for rust-analyzer. Replace its
 `src/lib.rs` with [the circuit above](./circuit/src/lib.rs) (tests included), then:

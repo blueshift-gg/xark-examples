@@ -23,10 +23,9 @@ const signer = (s: KeyPairSigner) => ({ address: s.address, role: AccountRole.WR
 const writable = (a: Address) => ({ address: a, role: AccountRole.WRITABLE });
 const readonly = (a: Address) => ({ address: a, role: AccountRole.READONLY });
 
-let program: Address;
+const program = address("ETPfSrNBJ6Z29DQ7HzcqHtLcZLWCvS5Ar8VdnoByLZpX"); // the program's `ID`
 let prover: TokenClaimProver;
 beforeAll(async () => {
-  program = (await generateKeyPairSigner()).address; // the program takes any address
   // Pinned to the circuit this client was generated from: a deployment can't swap it.
   prover = await TokenClaim.prover(artifacts("circuit", "token_claim"), { digest: TokenClaim.digest });
 });

@@ -2,7 +2,7 @@ use pinocchio::{AccountView, Address, ProgramResult, cpi::Seed, error::ProgramEr
 use pinocchio_token::instructions::{InitializeAccount3, Transfer};
 
 use crate::{
-    helpers::create,
+    helpers::{create, programs},
     state::{DISTRIBUTOR_SEED, Distributor, TOKEN_ACCOUNT_LEN, VAULT_SEED},
 };
 
@@ -21,12 +21,23 @@ impl<'a> TryFrom<&'a mut [AccountView]> for InitializeAccounts<'a> {
     type Error = ProgramError;
 
     fn try_from(accounts: &'a mut [AccountView]) -> Result<Self, Self::Error> {
-        let [authority, distributor, vault, mint, authority_token, ..] = accounts else {
+        let [
+            authority,
+            distributor,
+            vault,
+            mint,
+            authority_token,
+            token_program,
+            system_program,
+            ..,
+        ] = accounts
+        else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
         if !authority.is_signer() {
             return Err(ProgramError::MissingRequiredSignature);
         }
+        programs(token_program, system_program)?;
         Ok(Self {
             authority,
             distributor,
@@ -64,38 +75,34 @@ impl TryFrom<&[u8]> for InitializeInstructionData {
 /// funded with `total` from the authority's token account. Anyone can top the vault
 /// up later with a plain SPL transfer.
 pub struct Initialize<'a> {
-    pub program_id: &'a Address,
     pub accounts: InitializeAccounts<'a>,
     pub data: InitializeInstructionData,
     pub bump: u8,
     pub vault_bump: u8,
 }
 
-impl<'a> TryFrom<(&'a Address, &'a [u8], &'a mut [AccountView])> for Initialize<'a> {
+impl<'a> TryFrom<(&'a [u8], &'a mut [AccountView])> for Initialize<'a> {
     type Error = ProgramError;
 
-    fn try_from(
-        (program_id, data, accounts): (&'a Address, &'a [u8], &'a mut [AccountView]),
-    ) -> Result<Self, Self::Error> {
+    fn try_from((data, accounts): (&'a [u8], &'a mut [AccountView])) -> Result<Self, Self::Error> {
         let accounts = InitializeAccounts::try_from(accounts)?;
         let data = InitializeInstructionData::try_from(data)?;
 
         // The bumps are found once, here, and stored for every claim to reuse.
         let (address, bump) =
-            Address::find_program_address(&[DISTRIBUTOR_SEED, &data.root], program_id);
+            Address::find_program_address(&[DISTRIBUTOR_SEED, &data.root], &crate::ID);
         if accounts.distributor.address() != &address {
             return Err(ProgramError::InvalidSeeds);
         }
         let (address, vault_bump) = Address::find_program_address(
             &[VAULT_SEED, accounts.distributor.address().as_ref()],
-            program_id,
+            &crate::ID,
         );
         if accounts.vault.address() != &address {
             return Err(ProgramError::InvalidSeeds);
         }
 
         Ok(Self {
-            program_id,
             accounts,
             data,
             bump,
@@ -109,7 +116,6 @@ impl<'a> Initialize<'a> {
 
     pub fn process(&mut self) -> ProgramResult {
         let Self {
-            program_id,
             accounts,
             data,
             bump,
@@ -126,7 +132,7 @@ impl<'a> Initialize<'a> {
             accounts.authority,
             accounts.distributor,
             Distributor::LEN,
-            program_id,
+            &crate::ID,
             &seeds,
         )?;
 
@@ -150,7 +156,7 @@ impl<'a> Initialize<'a> {
         )
         .invoke()?;
 
-        let mut distributor = Distributor::load_mut(accounts.distributor, program_id)?;
+        let mut distributor = Distributor::load_mut(accounts.distributor)?;
         distributor.root = data.root;
         distributor.mint = *accounts.mint.address();
         distributor.bump = *bump;

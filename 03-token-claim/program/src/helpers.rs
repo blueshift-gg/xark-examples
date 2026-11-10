@@ -1,6 +1,7 @@
 use pinocchio::{
     AccountView, Address, ProgramResult,
     cpi::{Seed, Signer},
+    error::ProgramError,
     sysvars::{Sysvar, rent::Rent},
 };
 use pinocchio_system::instructions::{Allocate, Assign, CreateAccount, Transfer};
@@ -48,13 +49,23 @@ pub fn create(
     Assign { account, owner }.invoke_signed(&signer)
 }
 
-/// Write `message` to the program's logs.
+/// The token program and the system program, by address.
+pub fn programs(token_program: &AccountView, system_program: &AccountView) -> ProgramResult {
+    if token_program.address() != &pinocchio_token::ID
+        || system_program.address() != &pinocchio_system::ID
+    {
+        return Err(ProgramError::IncorrectProgramId);
+    }
+    Ok(())
+}
+
+/// `Program log: <message>`.
 pub fn log(message: &str) {
-    #[cfg(target_os = "solana")]
+    #[cfg(any(target_os = "solana", target_arch = "bpf"))]
     // SAFETY: the pointer and length are a valid `&str`'s.
     unsafe {
         pinocchio::syscalls::sol_log_(message.as_ptr(), message.len() as u64)
     };
-    #[cfg(not(target_os = "solana"))]
+    #[cfg(not(any(target_os = "solana", target_arch = "bpf")))]
     let _ = message;
 }

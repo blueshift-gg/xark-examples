@@ -91,9 +91,11 @@ solana program deploy target/deploy/<name>.so
 
 The first deploy takes its program address from `target/deploy/<name>-keypair.json`, which
 `cargo build-sbf` makes if it's missing; keep that keypair (it's ignored by git) to upgrade the same
-program later. No program names its own address: each derives its PDAs from the id the runtime
-passes it, so the same `.so` works at any address. The client tests load each program at an address
-of their own in LiteSVM; a client for a deployed program passes the deployed one instead.
+program later. The programs that own accounts (03 to 06) name their own address, `ID` in
+`program/src/lib.rs`, as Pinocchio programs do, and derive their PDAs and check owners against it: to
+deploy one elsewhere, put that keypair's address in `ID` and in the client, and build again. 01 and
+02 own no accounts and run at any address. The client tests load each program at its `ID` in
+LiteSVM (01 and 02 at an address of their own).
 
 The client tests are the reference clients: each instruction's tag and data layout, account metas,
 PDA seeds, public-input encoding, and the wallet's bookkeeping of notes and paths.

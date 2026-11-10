@@ -27,11 +27,8 @@ impl Distributor {
 
     /// The distributor in `account`. Only `initialize` makes an account of the
     /// program's this size (a receipt is the program's too, but empty).
-    pub fn load<'a>(
-        account: &'a AccountView,
-        program_id: &Address,
-    ) -> Result<Ref<'a, Self>, ProgramError> {
-        if !account.owned_by(program_id) || account.data_len() != Self::LEN {
+    pub fn load(account: &AccountView) -> Result<Ref<'_, Self>, ProgramError> {
+        if !account.owned_by(&crate::ID) || account.data_len() != Self::LEN {
             return Err(ProgramError::InvalidAccountData);
         }
         // SAFETY: the data is `LEN` bytes, and `Self` is bytes only (alignment 1).
@@ -40,11 +37,8 @@ impl Distributor {
         }))
     }
 
-    pub fn load_mut<'a>(
-        account: &'a mut AccountView,
-        program_id: &Address,
-    ) -> Result<RefMut<'a, Self>, ProgramError> {
-        if !account.owned_by(program_id) || account.data_len() != Self::LEN {
+    pub fn load_mut(account: &mut AccountView) -> Result<RefMut<'_, Self>, ProgramError> {
+        if !account.owned_by(&crate::ID) || account.data_len() != Self::LEN {
             return Err(ProgramError::InvalidAccountData);
         }
         // SAFETY: as in `load`.

@@ -158,7 +158,9 @@ make another of the same statement.
 The [program](./program/src/) is Pinocchio, as 01's and 02's are, with `pinocchio-token` for the
 SPL calls and plain PDAs for its state. `lib.rs` dispatches on the first byte; each instruction is a
 file under `instructions/`, with its accounts, its instruction data and its logic in their own
-structs, the accounts' checks in their `TryFrom`. `initialize` stores the root, the mint and both
+structs, the accounts' checks in their `TryFrom`. The program's address is `ID` in `lib.rs`, which
+the client test deploys it at; the PDAs derive from it and the owner checks are against it.
+`initialize` stores the root, the mint and both
 bumps in the distributor (`state.rs`), and creates the vault, a token account the distributor PDA
 owns, funded with `total` from the authority's account. `claim` checks the vault against the stored
 bump, assembles the public inputs itself and makes one call to the verifier crate `xark export`
@@ -273,7 +275,7 @@ integer, as a little-endian field element.
 ### Errors
 
 The program's one error of its own is `TokenClaimError::InvalidProof`, custom code 0; the rest are
-built-in `ProgramError`s. A failing instruction logs its error's name.
+built-in `ProgramError`s. The program logs its own error's name; the runtime names the rest.
 
 | Error | When |
 |---|---|
@@ -283,5 +285,7 @@ built-in `ProgramError`s. A failing instruction logs its error's name.
 | `InvalidSeeds` | an account isn't the PDA it should be |
 | `InvalidAccountData` | the distributor isn't one `initialize` made |
 | `MissingRequiredSignature` | the authority or the claimant didn't sign |
+| `IncorrectProgramId` | the token or the system program isn't the one named |
+| `NotEnoughAccountKeys` | fewer accounts than the instruction names |
 
 Next → [04 · Shielded pool](../04-shielded-pool/): Merkle trees plus salted commitments

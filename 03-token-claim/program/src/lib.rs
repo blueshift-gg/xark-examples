@@ -23,6 +23,12 @@ pub use instructions::*;
 
 use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError, program_entrypoint};
 
+// ETPfSrNBJ6Z29DQ7HzcqHtLcZLWCvS5Ar8VdnoByLZpX
+pub const ID: Address = Address::new_from_array([
+    0xc7, 0xea, 0xa7, 0xf3, 0x11, 0xc2, 0xe6, 0x66, 0x7a, 0x67, 0xbe, 0x28, 0x04, 0xd3, 0xb2, 0xe5,
+    0x7a, 0x54, 0xbc, 0x59, 0x8b, 0x15, 0x52, 0x82, 0x74, 0xad, 0x3e, 0x71, 0x3a, 0xcc, 0xfb, 0xfc,
+]);
+
 program_entrypoint!(process_instruction);
 #[cfg(not(test))]
 pinocchio::nostd_panic_handler!();
@@ -30,28 +36,24 @@ pinocchio::nostd_panic_handler!();
 pinocchio::no_allocator!();
 
 fn process_instruction(
-    program_id: &Address,
+    _program_id: &Address,
     accounts: &mut [AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    // The error's name goes in the logs, so a client sees `InvalidProof` rather
-    // than a bare custom code.
-    dispatch(program_id, accounts, instruction_data)
-        .inspect_err(|error| helpers::log(error.to_str::<TokenClaimError>()))
+    let result = dispatch(accounts, instruction_data);
+    // The program's own errors log their names, which the client tests match.
+    if let Err(error @ ProgramError::Custom(_)) = &result {
+        helpers::log(error.to_str::<TokenClaimError>());
+    }
+    result
 }
 
-fn dispatch(
-    program_id: &Address,
-    accounts: &mut [AccountView],
-    instruction_data: &[u8],
-) -> ProgramResult {
+fn dispatch(accounts: &mut [AccountView], instruction_data: &[u8]) -> ProgramResult {
     match instruction_data.split_first() {
         Some((Initialize::DISCRIMINATOR, data)) => {
-            Initialize::try_from((program_id, data, accounts))?.process()
+            Initialize::try_from((data, accounts))?.process()
         }
-        Some((Claim::DISCRIMINATOR, data)) => {
-            Claim::try_from((program_id, data, &*accounts))?.process()
-        }
+        Some((Claim::DISCRIMINATOR, data)) => Claim::try_from((data, &*accounts))?.process(),
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }

@@ -8,7 +8,7 @@ use token_claim_xark_verifier::{Proof, verify};
 
 use crate::{
     TokenClaimError,
-    helpers::create,
+    helpers::{create, programs},
     state::{CLAIMED_SEED, DISTRIBUTOR_SEED, Distributor, VAULT_SEED},
 };
 
@@ -23,23 +23,32 @@ pub struct ClaimAccounts<'a> {
     pub claimant_token: &'a AccountView,
 }
 
-impl<'a> TryFrom<(&'a Address, &'a [AccountView])> for ClaimAccounts<'a> {
+impl<'a> TryFrom<&'a [AccountView]> for ClaimAccounts<'a> {
     type Error = ProgramError;
 
-    fn try_from(
-        (program_id, accounts): (&'a Address, &'a [AccountView]),
-    ) -> Result<Self, Self::Error> {
-        let [claimant, distributor, vault, receipt, claimant_token, ..] = accounts else {
+    fn try_from(accounts: &'a [AccountView]) -> Result<Self, Self::Error> {
+        let [
+            claimant,
+            distributor,
+            vault,
+            receipt,
+            claimant_token,
+            token_program,
+            system_program,
+            ..,
+        ] = accounts
+        else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
         if !claimant.is_signer() {
             return Err(ProgramError::MissingRequiredSignature);
         }
-        let vault_bump = Distributor::load(distributor, program_id)?.vault_bump;
+        programs(token_program, system_program)?;
+        let vault_bump = Distributor::load(distributor)?.vault_bump;
         let vault_address = Address::derive_address(
             &[VAULT_SEED, distributor.address().as_ref()],
             Some(vault_bump),
-            program_id,
+            &crate::ID,
         );
         if vault.address() != &vault_address {
             return Err(ProgramError::InvalidSeeds);
@@ -83,22 +92,17 @@ impl<'a> TryFrom<&'a [u8]> for ClaimInstructionData<'a> {
 /// the list for `amount`. The receipt is created here, so a second claim by the same
 /// address fails.
 pub struct Claim<'a> {
-    pub program_id: &'a Address,
     pub accounts: ClaimAccounts<'a>,
     pub data: ClaimInstructionData<'a>,
 }
 
-impl<'a> TryFrom<(&'a Address, &'a [u8], &'a [AccountView])> for Claim<'a> {
+impl<'a> TryFrom<(&'a [u8], &'a [AccountView])> for Claim<'a> {
     type Error = ProgramError;
 
-    fn try_from(
-        (program_id, data, accounts): (&'a Address, &'a [u8], &'a [AccountView]),
-    ) -> Result<Self, Self::Error> {
-        Ok(Self {
-            program_id,
-            accounts: ClaimAccounts::try_from((program_id, accounts))?,
-            data: ClaimInstructionData::try_from(data)?,
-        })
+    fn try_from((data, accounts): (&'a [u8], &'a [AccountView])) -> Result<Self, Self::Error> {
+        let accounts = ClaimAccounts::try_from(accounts)?;
+        let data = ClaimInstructionData::try_from(data)?;
+        Ok(Self { accounts, data })
     }
 }
 
@@ -106,13 +110,9 @@ impl<'a> Claim<'a> {
     pub const DISCRIMINATOR: &'a u8 = &1;
 
     pub fn process(&mut self) -> ProgramResult {
-        let Self {
-            program_id,
-            accounts,
-            data,
-        } = self;
+        let Self { accounts, data } = self;
         let (root, bump) = {
-            let distributor = Distributor::load(accounts.distributor, program_id)?;
+            let distributor = Distributor::load(accounts.distributor)?;
             (distributor.root, distributor.bump)
         };
 
@@ -130,12 +130,12 @@ impl<'a> Claim<'a> {
                 accounts.distributor.address().as_ref(),
                 accounts.claimant.address().as_ref(),
             ],
-            program_id,
+            &crate::ID,
         );
         if accounts.receipt.address() != &address {
             return Err(ProgramError::InvalidSeeds);
         }
-        if accounts.receipt.owned_by(program_id) {
+        if accounts.receipt.owned_by(&crate::ID) {
             return Err(ProgramError::AccountAlreadyInitialized);
         }
         let receipt_bump = [receipt_bump];
@@ -149,7 +149,7 @@ impl<'a> Claim<'a> {
             accounts.claimant,
             accounts.receipt,
             0,
-            program_id,
+            &crate::ID,
             &receipt_seeds,
         )?;
 

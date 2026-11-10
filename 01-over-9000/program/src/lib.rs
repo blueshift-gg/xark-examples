@@ -53,6 +53,10 @@ impl<'a> TryFrom<&'a [u8]> for Verify<'a> {
 }
 
 impl Verify<'_> {
+    // Out of line: inlined into the entrypoint under fat LTO, the pairing check's
+    // buffers took its frame past the SBF limit of 4 KiB, which only warns at build
+    // time and corrupts the stack at run time.
+    #[inline(never)]
     pub fn process(&self) -> ProgramResult {
         if !verify(&Proof::from_le_bytes(self.data.proof), &[]) {
             return Err(Over9000Error::InvalidProof.into());

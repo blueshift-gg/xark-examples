@@ -18,7 +18,6 @@ import {
 import * as xark from "@blueshift-gg/xark";
 import { createPool } from "@blueshift-gg/xark/pool";
 import { FailedTransactionMetadata, LiteSVM, type TransactionMetadata } from "litesvm";
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -88,16 +87,15 @@ export async function send(svm: LiteSVM, payer: KeyPairSigner, ...instructions: 
 }
 
 /**
- * An Anchor instruction's data: its discriminator, `sha256("global:<name>")[..8]`,
- * then its arguments' Borsh encodings. Fixed-size arguments (`[u8; N]`, `u64`) are
- * their bytes; `u64le` writes one.
+ * An instruction's data: its one-byte tag (see `program/src/lib.rs`), then its
+ * arguments. Fixed-size arguments (`[u8; N]`, `u64`) are their bytes; `u64le`
+ * writes one.
  */
-export function anchorData(name: string, ...args: Uint8Array[]): Uint8Array {
-  const discriminator = createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
-  return new Uint8Array(Buffer.concat([discriminator, ...args]));
+export function instructionData(tag: number, ...args: Uint8Array[]): Uint8Array {
+  return new Uint8Array(Buffer.concat([Uint8Array.of(tag), ...args]));
 }
 
-/** A `u64`, little-endian, as Borsh and PDA seeds have it. */
+/** A `u64`, little-endian, as the program reads it. */
 export function u64le(x: bigint): Uint8Array {
   const out = new Uint8Array(8);
   new DataView(out.buffer).setBigUint64(0, x, true);

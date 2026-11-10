@@ -1,7 +1,7 @@
 # 03 · Shielded pool: unlinkable transfers (Tornado-style)
 
 Deposit a fixed amount, then withdraw it to a fresh address so that nobody can link the withdrawal
-to the deposit. On-chain an observer sees a deposit and, later, an unrelated-looking withdrawal.
+to the deposit. Onchain, an observer sees a deposit and, later, an unrelated-looking withdrawal.
 This is the first real privacy primitive in the ladder: it combines proofs ([01](../01-over-9000/))
 and commitments ([02](../02-zkyc/)) with Merkle membership and nullifiers.
 
@@ -25,7 +25,7 @@ mixer is only as private as it is used.
 ### The chain never hashes
 
 A shielded pool is a Merkle tree, and the classic trap is that the Poseidon in your circuit and the
-Poseidon on-chain must be **byte-for-byte identical** or the roots never match. Instead of
+Poseidon onchain must be **byte-for-byte identical** or the roots never match. Instead of
 reimplementing the hash in a Solana program, all hashing stays in the circuits:
 
 - **`deposit`** proves *"`new_root` is the tree rooted at `old_root` with `leaf` appended at
@@ -34,7 +34,7 @@ reimplementing the hash in a Solana program, all hashing stays in the circuits:
   `root, nullifier_hash, recipient, relayer, fee`.
 
 The program stores only a ring of recent roots, the next index, and one marker account per spent
-nullifier. It verifies proofs and moves lamports: no Poseidon on-chain, and circuit/chain agreement
+nullifier. It verifies proofs and moves lamports: no Poseidon onchain, and circuit/chain agreement
 holds *by construction*.
 
 ### One type for the whole tree: `Path`
@@ -112,14 +112,14 @@ circuits/deposit/    proves a tree append                (public: Append)
 circuits/withdraw/   proves membership + nullifier, and  (public: Withdrawal)
                      Note's commitment and nullifier hash
 client/              both generated clients, and the wallet test
-program/             Anchor: verify both proofs, hold and pay lamports, track roots and nullifiers
+program/             Pinocchio: verify both proofs, hold and pay lamports, track roots and nullifiers
 ```
 
 ## Run it
 
 ```bash
 just build          # both circuits → keys → verifier crates → clients → .so
-just test-circuit   # the tree's tests, then each circuit's
+just test-circuit   # the tree's tests, each circuit's, then the program's
 cd .. && npx vitest run 03
 ```
 
@@ -127,6 +127,10 @@ The [test](./client/shielded-pool.test.ts) is the reference wallet and client: t
 kept current across the second, a withdrawal relayed to a fresh address for a fee, and the refusals
 (another recipient, another fee, an unknown root, the same note twice). It also checks the
 program's empty root against `Path.first().treeRoot()`.
+
+The program's own [tests](./program/src/tests.rs) run on the host, against accounts laid out as the
+runtime lays them out: each account check below refuses what it should, and the demo proofs verify
+against the public inputs the program assembles, and not for another recipient, relayer or fee.
 
 ## What it gives you, and doesn't
 
@@ -144,41 +148,92 @@ first. A high-throughput deployment needs a sequencer/batcher or a different app
 
 ## Reference
 
+The program is [Pinocchio](https://github.com/anza-xyz/pinocchio), `no_std`, in one file,
+[`program/src/lib.rs`](./program/src/lib.rs). Instruction data is a one-byte tag, then the
+arguments' bytes in order; integers are little-endian, and data of any other length is refused.
+
 ### Instructions
 
-**`initialize(denomination: u64)`**: create the pool for a denomination (the empty-tree root is
-fixed on-chain). Accounts: `pool` (init, PDA), `authority` (signer, payer), `system_program`.
+**`0` `initialize(denomination: u64)`**, data `[0] ‖ denomination (8)`: create the pool for a
+denomination, with the empty-tree root fixed onchain. Accounts: `pool` (writable, the PDA, not yet
+created), `authority` (writable signer, pays the rent), the system program.
 
-**`deposit(commitment: [u8;32], new_root: [u8;32], proof: [u8;256])`**: deposit the denomination and
-append `commitment`; `proof` attests that `new_root` extends the tree by one leaf. Accounts: `pool`
-(mut), `depositor` (signer), `system_program`. Public inputs: `Append` (`old_root, new_root, leaf,
-index`).
+**`1` `deposit(commitment, new_root, proof)`**, data `[1] ‖ commitment (32) ‖ new_root (32) ‖ proof
+(256)`: deposit the denomination and append `commitment`; `proof` attests that `new_root` extends
+the tree by one leaf. Accounts: `pool` (writable), `depositor` (writable signer), the system
+program. Public inputs: `Append` (`old_root, new_root, leaf, index`). Logs `Program data:` with the
+commitment and its leaf index (u32), for a wallet to follow the tree.
 
-**`withdraw(proof: [u8;256], root: [u8;32], nullifier_hash: [u8;32], fee: u64)`**: pay
-`denomination − fee` to `recipient` and `fee` to the relayer; the `nullifier` PDA is created here, so
-a repeat with the same nullifier fails. Accounts: `pool` (mut), `nullifier` (init, PDA), `recipient`
-(unchecked, mut), `relayer` (signer, payer), `system_program`. Public inputs:
+**`2` `withdraw(proof, root, nullifier_hash, fee: u64)`**, data `[2] ‖ proof (256) ‖ root (32) ‖
+nullifier_hash (32) ‖ fee (8)`: pay `denomination − fee` to `recipient` and `fee` to the relayer;
+the `nullifier` PDA is created here, so a repeat with the same nullifier fails. Accounts: `pool`
+(writable), `nullifier` (writable, the PDA, not yet created), `recipient` (writable, any account but
+the pool's own two), `relayer` (writable signer, pays the rent), the system program. Public inputs:
 `Withdrawal` (`root, nullifier_hash, recipient (hi, lo), relayer (hi, lo), fee`).
+
+### Account checks
+
+Every account check is written out, in the program's `accounts` module and at the top of each
+instruction:
+
+- signers and payers sign and are writable; every account the program writes to is writable;
+- the system program is the system program;
+- the pool is owned by the program, is exactly a pool's size with a pool's tag, and sits at the
+  address its own denomination and stored bump derive;
+- a new pool or nullifier sits at the address its seeds derive with the canonical bump (the bump
+  `find_program_address` returns), so there is exactly one per denomination, and one per nullifier;
+- a new account must not exist yet: owned by the system program with no data. Lamports sent to the
+  address beforehand don't block it; creation tops them up to rent exemption;
+- a nullifier that exists is spent (`NullifierSpent`);
+- the lamport moves are checked arithmetic, and the runtime keeps the pool rent-exempt.
 
 ### PDAs & state
 
-| PDA | Seeds |
-|---|---|
-| `pool` | `["pool", denomination as u64 LE]` |
-| `nullifier` | `["nullifier", denomination as u64 LE, nullifier_hash]` |
+| PDA | Seeds | Size |
+|---|---|--:|
+| `pool` | `["pool", denomination as u64 LE]` | 536 |
+| `nullifier` | `["nullifier", denomination as u64 LE, nullifier_hash]` | 1 |
 
-`Pool` state: `denomination: u64`, `next_index: u32`, `current_root_index: u32`,
-`roots: [[u8;32]; 16]` (the recent-root ring), `bump: u8`. An address enters the circuit as a
-`Hash`, `[hi, lo]`: each 16-byte half read as a big-endian integer, as a little-endian field
-element.
+The pool's layout, every field little-endian:
+
+| Offset | Size | Field |
+|--:|--:|---|
+| 0 | 1 | tag, `1` |
+| 1 | 1 | bump |
+| 2 | 6 | reserved, zero |
+| 8 | 8 | `denomination: u64` |
+| 16 | 4 | `next_index: u32` |
+| 20 | 4 | `current_root_index: u32` |
+| 24 | 512 | `roots: [[u8; 32]; 16]`, the recent-root ring |
+
+A nullifier's account is one byte, its tag, `2`; that it exists is what counts. An address enters
+the circuit as a `Hash`, `[hi, lo]`: each 16-byte half read as a big-endian integer, as a
+little-endian field element.
 
 ### Errors
 
-| Error | Message |
-|---|---|
-| `InvalidProof` | invalid proof |
-| `UnknownRoot` | unknown or stale merkle root |
-| `FeeTooHigh` | fee exceeds denomination |
-| `TreeFull` | tree is full |
+The program's own errors are `custom program error` codes, and each logs its name and message.
+Account checks fail with the runtime's standard errors (`MissingRequiredSignature`, `Immutable`,
+`InvalidAccountOwner`, `InvalidSeeds`, `AccountAlreadyInitialized`, …).
+
+| Code | Error | Message |
+|--:|---|---|
+| 6000 | `InvalidProof` | invalid proof |
+| 6001 | `UnknownRoot` | unknown or stale merkle root |
+| 6002 | `FeeTooHigh` | fee exceeds denomination |
+| 6003 | `TreeFull` | tree is full |
+| 6004 | `NullifierSpent` | nullifier already spent |
+
+### Numbers
+
+| Instruction | Onchain CU |
+|---|--:|
+| `initialize` | 2,954 |
+| `deposit` | 91,139 to 91,724 |
+| `withdraw` | 110,320 to 111,820 |
+
+Measured in the client test's LiteSVM, the whole instruction with its system-program CPI. A deposit
+varies with its public inputs; a withdrawal also with how many bumps the nullifier's address takes
+to find (1,500 CU each).
 
 Next → [04 · Shielded transfer](../04-shielded-transfer/)

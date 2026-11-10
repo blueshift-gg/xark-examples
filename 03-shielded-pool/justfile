@@ -1,5 +1,5 @@
 # shielded-pool: two circuits (deposit, withdraw) → keys → verifier crates →
-# TS clients → one Anchor program. Prerequisites: ../RUNBOOK.md. The root
+# TS clients → one Pinocchio program. Prerequisites: ../RUNBOOK.md. The root
 # `just test` runs client/ against the program.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
@@ -16,18 +16,22 @@ circuit name crate:
     xark export circuits/{{name}} --crate-name {{crate}}
     xark client circuits/{{name}} --out client/
 
-# The circuits' own tests, and the tree's.
+# The circuits' own tests and the tree's, then the program's: its account checks,
+# and the demo proofs against the public inputs it assembles. The program's need
+# `build` first (the verifier crates).
 test-circuit:
     cd circuits/pool && cargo test --release
     xark test circuits/deposit
     xark test circuits/withdraw
+    cd program && cargo test -q --release
 
 xark:
     @xark --version | grep -q '^xark 0\.3\.' || { echo "needs xark 0.3: see ../RUNBOOK.md" >&2; exit 1; }
 
-# Build, then prove with the client and verify on-chain (LiteSVM). `npm install` first.
-test: build
+# Build, then every test: the circuits', the program's, and the client's, which
+# proves with the client and verifies onchain (LiteSVM). `npm install` first.
+test: build test-circuit
     npm test
 
 clean:
-    rm -rf circuits/*/target program/target program/.anchor
+    rm -rf circuits/*/target program/target

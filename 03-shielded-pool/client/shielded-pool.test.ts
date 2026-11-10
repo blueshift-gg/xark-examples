@@ -11,7 +11,7 @@ import {
   type KeyPairSigner,
 } from "@solana/kit";
 import type { LiteSVM } from "litesvm";
-import { anchorData, artifacts, funded, pooled, send, u64le, vm } from "./harness";
+import { artifacts, instructionData, funded, pooled, send, u64le, vm } from "./harness";
 import { Append, Path, ShieldedPoolDeposit, type PathValue, type ShieldedPoolDepositProver } from "./shielded_pool_deposit";
 import { Field, Note, ShieldedPoolWithdraw, Withdrawal, type ShieldedPoolWithdrawProver } from "./shielded_pool_withdraw";
 
@@ -19,6 +19,10 @@ const program = address("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 const system = address("11111111111111111111111111111111");
 const DENOMINATION = 1_000_000_000n; // 1 SOL
 const bytes = (a: Address) => new Uint8Array(getAddressEncoder().encode(a));
+// The program's instruction tags (`program/src/lib.rs`).
+const INITIALIZE = 0;
+const DEPOSIT = 1;
+const WITHDRAW = 2;
 const signer = (s: KeyPairSigner) => ({ address: s.address, role: AccountRole.WRITABLE_SIGNER, signer: s });
 
 let deposits: ShieldedPoolDepositProver;
@@ -41,13 +45,13 @@ const newNote = (): Note => ({
 
 /** A pool of `DENOMINATION` deposits, and the wallet's view of its tree. */
 async function pool() {
-  const svm = vm(program, "program/target/deploy/shielded_pool.so");
+  const svm = vm(program, "program/target/deploy/shielded_pool_program.so");
   const [poolAddress] = await getProgramDerivedAddress({ programAddress: program, seeds: ["pool", u64le(DENOMINATION)] });
   const authority = await funded(svm);
   await send(svm, authority, {
     programAddress: program,
     accounts: [{ address: poolAddress, role: AccountRole.WRITABLE }, signer(authority), { address: system, role: AccountRole.READONLY }],
-    data: anchorData("initialize", u64le(DENOMINATION)),
+    data: instructionData(INITIALIZE, u64le(DENOMINATION)),
   });
   // The program's empty root is the circuit's: the first path's tree root.
   const account = svm.getAccount(poolAddress);
@@ -65,7 +69,7 @@ async function deposit(p: { svm: LiteSVM; poolAddress: Address; tip: PathValue }
   await send(p.svm, depositor, {
     programAddress: program,
     accounts: [{ address: p.poolAddress, role: AccountRole.WRITABLE }, signer(depositor), { address: system, role: AccountRole.READONLY }],
-    data: anchorData("deposit", leaf.toBytes(), append.newRoot.toBytes(), proof.toBytes()),
+    data: instructionData(DEPOSIT, leaf.toBytes(), append.newRoot.toBytes(), proof.toBytes()),
   });
   p.tip = path.next(leaf);
   return { path, leaf };
@@ -83,7 +87,7 @@ async function withdrawal(poolAddress: Address, relayer: KeyPairSigner, recipien
       signer(relayer),
       { address: system, role: AccountRole.READONLY },
     ],
-    data: anchorData("withdraw", proof, root.toBytes(), nullifierHash.toBytes(), u64le(fee)),
+    data: instructionData(WITHDRAW, proof, root.toBytes(), nullifierHash.toBytes(), u64le(fee)),
   };
 }
 
@@ -119,7 +123,7 @@ test("deposit, others deposit, withdraw unlinkably through a relayer, once", asy
   expect(p.svm.getBalance(relayer.address)! > before).toBe(true);
 
   // The nullifier is spent: the same note can't come out twice.
-  await expect(send(p.svm, relayer, await ix(recipient))).rejects.toThrow(/already in use/);
+  await expect(send(p.svm, relayer, await ix(recipient))).rejects.toThrow(/NullifierSpent/);
 });
 
 test("a note that isn't in the tree has no proof", async () => {

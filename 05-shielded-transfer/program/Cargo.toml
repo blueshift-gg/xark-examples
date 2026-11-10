@@ -39,5 +39,5 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 # Amounts and indices use checked arithmetic explicitly; this catches any that
-# don't, as the Anchor version's profile did.
+# don't.
 overflow-checks = true

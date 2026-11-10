@@ -22,10 +22,6 @@ Cargo.lock
 !05-shielded-transfer/circuits/transact/Cargo.lock
 !05-shielded-transfer/program/Cargo.lock
 
-# Anchor
-.anchor/
-test-ledger/
-
 # Keys & secrets — never commit
 *-keypair.json
 .env

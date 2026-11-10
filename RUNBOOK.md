@@ -12,7 +12,6 @@ The reproducible build and deployment path. If a command here disagrees with an 
 | xark crates, `@blueshift-gg/xark` | `0.3` | from crates.io and npm, through the manifests |
 | `cargo-build-sbf` | `4.2.0` | `cargo install cargo-build-sbf --version 4.2.0 --locked` |
 | Node | 22+ | [nodejs.org](https://nodejs.org) |
-| Anchor, for deploy only | `1.1.2` | `avm install 1.1.2 && avm use 1.1.2` |
 
 No nightly Rust: xark 0.3 compiles circuits with your stable toolchain.
 
@@ -81,20 +80,23 @@ the proof goes in a transaction to the example's program in LiteSVM (in-process,
 
 ## 4. Deploying a program
 
-```bash
-# Examples 01 and 02
-cd program
-cargo build-sbf --arch v3
-solana program deploy target/deploy/<name>.so
+Every program is Pinocchio: one `.so`, with no framework and no IDL. After the example's
+`npm run build`, which generates the verifier crates the program links:
 
-# Examples 03 and 04
-cd program
-cargo build-sbf --arch v3
-anchor deploy
+```bash
+cd <example>/program
+cargo build-sbf --arch v3                   # target/deploy/<name>.so and <name>-keypair.json
+solana program deploy target/deploy/<name>.so
 ```
 
-The client tests are the reference clients: exact Anchor discriminators, account metas, PDA seeds,
-public-input encoding, and the wallet's bookkeeping of notes and paths.
+The first deploy takes its program address from `target/deploy/<name>-keypair.json`, which
+`cargo build-sbf` makes if it's missing; keep that keypair (it's ignored by git) to upgrade the same
+program later. No program names its own address: each derives its PDAs from the id the runtime
+passes it, so the same `.so` works at any address. The client tests load each program at an address
+of their own in LiteSVM; a client for a deployed program passes the deployed one instead.
+
+The client tests are the reference clients: each instruction's tag and data layout, account metas,
+PDA seeds, public-input encoding, and the wallet's bookkeeping of notes and paths.
 
 ## 5. Trusted setup
 

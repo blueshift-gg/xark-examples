@@ -153,9 +153,24 @@ first. A high-throughput deployment needs a sequencer/batcher or a different app
 
 ## Reference
 
-The program is [Pinocchio](https://github.com/anza-xyz/pinocchio), `no_std`, in one file,
-[`program/src/lib.rs`](./program/src/lib.rs). Instruction data is a one-byte tag, then the
-arguments' bytes in order; integers are little-endian, and data of any other length is refused.
+The program is [Pinocchio](https://github.com/anza-xyz/pinocchio), `no_std`:
+
+```
+program/src/
+  lib.rs              the entrypoint, which dispatches on the first byte
+  instructions/       initialize.rs, deposit.rs, withdraw.rs: one file per instruction
+  state.rs            the pool's layout and checks, the nullifier marker, the seeds
+  errors.rs           ShieldedPoolError
+  helpers.rs          the shared account checks and logs
+  tests.rs            host tests
+```
+
+Each instruction is an accounts struct and an instruction-data struct, each parsed with
+`TryFrom`, and a `process` that verifies the proof and then moves state and lamports. Instruction
+data is a one-byte discriminator, then the arguments' bytes in order; integers are little-endian,
+and data of any other length is refused. The program's address is `ID` in `lib.rs`,
+`Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS`, which the client test deploys it at; the
+checks of the pool's and nullifiers' owner and addresses are against it.
 
 ### Instructions
 
@@ -178,13 +193,13 @@ the pool's own two), `relayer` (writable signer, pays the rent), the system prog
 
 ### Account checks
 
-Every account check is written out, in the program's `accounts` module and at the top of each
-instruction:
+Every account check is written out, in each instruction's `TryFrom` (with the shared ones in
+`helpers.rs` and `Pool::check`), before `process` runs:
 
 - signers and payers sign and are writable; every account the program writes to is writable;
 - the system program is the system program;
 - the pool is owned by the program, is exactly a pool's size with a pool's tag, and sits at the
-  address its own denomination and stored bump derive;
+  address its own denomination and stored bump derive (one hash, no bump search);
 - a new pool or nullifier sits at the address its seeds derive with the canonical bump (the bump
   `find_program_address` returns), so there is exactly one per denomination, and one per nullifier;
 - a new account must not exist yet: owned by the system program with no data. Lamports sent to the
@@ -217,25 +232,28 @@ little-endian field element.
 
 ### Errors
 
-The program's own errors are `custom program error` codes, and each logs its name and message.
-Account checks fail with the runtime's standard errors (`MissingRequiredSignature`, `Immutable`,
-`InvalidAccountOwner`, `InvalidSeeds`, `AccountAlreadyInitialized`, …).
+The program's own errors are `ShieldedPoolError`, `custom program error` codes from 0, and each
+logs its name and message. Everything else fails with a built-in `ProgramError`:
+`NotEnoughAccountKeys`, `InvalidInstructionData`, `MissingRequiredSignature`, `Immutable`,
+`IncorrectProgramId`, `InvalidAccountOwner`, `InvalidAccountData`, `InvalidSeeds`,
+`AccountAlreadyInitialized`, `InvalidArgument` (a payout to the pool's own accounts),
+`InsufficientFunds` and `ArithmeticOverflow`.
 
 | Code | Error | Message |
 |--:|---|---|
-| 6000 | `InvalidProof` | invalid proof |
-| 6001 | `UnknownRoot` | unknown or stale merkle root |
-| 6002 | `FeeTooHigh` | fee exceeds denomination |
-| 6003 | `TreeFull` | tree is full |
-| 6004 | `NullifierSpent` | nullifier already spent |
+| 0 | `InvalidProof` | invalid proof |
+| 1 | `UnknownRoot` | unknown or stale merkle root |
+| 2 | `FeeTooHigh` | fee exceeds denomination |
+| 3 | `TreeFull` | tree is full |
+| 4 | `NullifierSpent` | nullifier already spent |
 
 ### Numbers
 
 | Instruction | Onchain CU |
 |---|--:|
-| `initialize` | 2,954 |
-| `deposit` | 91,139 to 91,724 |
-| `withdraw` | 110,320 to 111,820 |
+| `initialize` | 2,988 |
+| `deposit` | 91,154 to 91,747 |
+| `withdraw` | 110,351 to 113,351 |
 
 Measured in the client test's LiteSVM, the whole instruction with its system-program CPI. A deposit
 varies with its public inputs; a withdrawal also with how many bumps the nullifier's address takes

@@ -4,6 +4,7 @@
   "workspaces": [
     "01-over-9000",
     "02-age-verification",
+    "03-token-claim",
     "03-shielded-pool",
     "04-shielded-transfer"
   ],

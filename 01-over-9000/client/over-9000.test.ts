@@ -23,7 +23,10 @@ test("a proof of 9001 verifies on-chain", async () => {
 
   const tampered = proof.toBytes();
   tampered[0] ^= 1;
-  await expect(send(svm, payer, verify(tampered))).rejects.toThrow(/invalid instruction data/);
+  // Over9000Error::InvalidProof, the program's error 0.
+  await expect(send(svm, payer, verify(tampered))).rejects.toThrow(/custom program error: 0x0/);
+  // Anything but the 256 bytes is not this instruction.
+  await expect(send(svm, payer, verify(proof.toBytes().slice(1)))).rejects.toThrow(/invalid instruction data/);
 });
 
 test("9000 has no proof", () => {

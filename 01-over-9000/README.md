@@ -45,7 +45,10 @@ const proof = prover.prove({ powerLevel: 9001 });
 // instruction data: proof.toBytes(), 256 bytes
 ```
 
-The [program](./program/src/lib.rs) is one call to the verifier crate `xark export` generated. Try
+The [program](./program/src/lib.rs) has one instruction, `Verify`, and no accounts: its instruction
+data is the proof, parsed to exactly 256 bytes (else the built-in `InvalidInstructionData`), then
+one call to the verifier crate `xark export` generated (a proof that fails is the program's own
+`Over9000Error::InvalidProof`, code 0). Verifying costs about 76,000 compute units. Try
 `prover.prove({ powerLevel: 9000 })`: there's no proof to make, and the client throws a
 `CheckFailed` naming the line: ``the inputs fail the check at src/lib.rs:9:5: `require(power_level > 9000u64);` ``.
 
@@ -99,7 +102,7 @@ over-9000-verifier = { path = "../over-9000/over-9000-verifier" }
 pinocchio = "0.11"
 ```
 
-and `src/lib.rs`:
+and `src/lib.rs`, the [program](./program/src/lib.rs) without its doc comments:
 
 ```rust
 #![no_std]
@@ -111,11 +114,52 @@ pinocchio::nostd_panic_handler!();
 pinocchio::no_allocator!();
 
 fn process_instruction(_: &Address, _: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    let proof: &[u8; 256] = data.try_into().map_err(|_| ProgramError::InvalidInstructionData)?;
-    if !verify(&Proof::from_le_bytes(proof), &[]) {
-        return Err(ProgramError::InvalidInstructionData);
+    Verify::try_from(data)?.process()
+}
+
+pub struct VerifyInstructionData<'a> {
+    pub proof: &'a [u8; 256],
+}
+
+impl<'a> TryFrom<&'a [u8]> for VerifyInstructionData<'a> {
+    type Error = ProgramError;
+
+    fn try_from(data: &'a [u8]) -> Result<Self, Self::Error> {
+        let proof = data.try_into().map_err(|_| ProgramError::InvalidInstructionData)?;
+        Ok(Self { proof })
     }
-    Ok(())
+}
+
+pub struct Verify<'a> {
+    pub data: VerifyInstructionData<'a>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for Verify<'a> {
+    type Error = ProgramError;
+
+    fn try_from(data: &'a [u8]) -> Result<Self, Self::Error> {
+        Ok(Self { data: VerifyInstructionData::try_from(data)? })
+    }
+}
+
+impl Verify<'_> {
+    pub fn process(&self) -> ProgramResult {
+        if !verify(&Proof::from_le_bytes(self.data.proof), &[]) {
+            return Err(Over9000Error::InvalidProof.into());
+        }
+        Ok(())
+    }
+}
+
+#[repr(u32)]
+pub enum Over9000Error {
+    InvalidProof = 0,
+}
+
+impl From<Over9000Error> for ProgramError {
+    fn from(e: Over9000Error) -> Self {
+        ProgramError::Custom(e as u32)
+    }
 }
 ```
 
@@ -162,7 +206,7 @@ console.log(result instanceof FailedTransactionMetadata ? `failed: ${result.err(
 ```
 
 ```bash
-npx tsx prove.ts    # verified on-chain in 75948 CU
+npx tsx prove.ts    # verified on-chain in 75949 CU
 ```
 
 That's the whole loop: change the circuit, rerun steps 1–2 and rebuild, and the client and the
@@ -173,7 +217,7 @@ verifier follow it. This directory's `npm run build` runs the same steps, with i
 ```
 circuit/       the circuit crate: src/lib.rs, plain Rust, with its tests
 client/        the generated TypeScript client, and its test: prove, then verify onchain
-program/       Pinocchio verifier: one verify call, minimal CU
+program/       Pinocchio verifier: src/lib.rs, one instruction, one verify call
 package.json   build · test:circuit · test
 ```
 

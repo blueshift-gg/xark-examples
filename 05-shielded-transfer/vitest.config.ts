@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 // `client/*.test.ts`: prove with the generated client, then send the proof to the
-// program in LiteSVM. `just build` makes what they read.
+// program in LiteSVM. `npm run build` makes what they read.
 export default defineConfig({
   test: {
     include: ["client/*.test.ts"],

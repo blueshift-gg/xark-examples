@@ -5,16 +5,19 @@
 Install the toolchain from `RUNBOOK.md`, then run:
 
 ```bash
+npm ci
 xark doctor
-just fmt-check
-just test-circuits
-just test
-just clippy
-just check-clients
+npm run build
+npm run check:clients
+npm run test:circuit
+npm test
+npm run fmt:check
+npm run clippy
 ```
 
-`just test` makes keys, verifier crates, clients and SBF programs under ignored `target/` and
-`*-verifier/` directories, then proves with each client and verifies on-chain in LiteSVM. Never commit
+`npm run build` makes keys, verifier crates, clients and SBF programs under ignored `target/` and
+`*-verifier/` directories; `npm test` then proves with each client and verifies onchain in LiteSVM.
+From an example's directory, the same commands check that example alone, as its CI job does. Never commit
 generated keys or real witness data.
 
 ## Repository contracts
@@ -23,8 +26,8 @@ generated keys or real witness data.
   Rust: the client tests call it through the generated clients, and the demo proofs through the
   crate. Don't reimplement them in TypeScript or in a program. The client tests check the
   programs' empty-root constants against the circuits' `Path.first().treeRoot()`.
-- The generated clients are committed so readers see them; `just check-clients` fails if one is
-  stale. Rebuild (`just build`) and commit the result with the circuit change.
+- The generated clients are committed so readers see them; `npm run check:clients` fails if one
+  is stale. Rebuild (`npm run build`) and commit the result with the circuit change.
 - Treat public-input order as an API: it's each circuit's public statement struct (`Append`,
   `Withdrawal`, `Transaction`). A change updates the struct, the program's `public_inputs`, and the
   README reference together.

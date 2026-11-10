@@ -1,4 +1,4 @@
-# Build artifacts (regenerate with `just build`)
+# Build artifacts (regenerate with `npm run build`)
 **/target/
 node_modules/
 *.gz

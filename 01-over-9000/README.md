@@ -55,8 +55,9 @@ published commitment ([02](../02-zkyc/)) or a Merkle tree of deposits
 ## Run it
 
 ```bash
-just test           # circuit → key → verifier crate → client → .so, then the client test
-just test-circuit   # the circuit's Rust tests: 9001 passes, 9000 doesn't
+npm run build          # circuit → key → verifier crate → client → .so
+npm run test:circuit   # the circuit's Rust tests: 9001 passes, 9000 doesn't
+npm test               # prove with the client, verify onchain (LiteSVM)
 ```
 
 Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks the Rust and xark side).
@@ -161,15 +162,15 @@ npx tsx prove.ts    # verified on-chain in 75948 CU
 ```
 
 That's the whole loop: change the circuit, rerun steps 1–2 and rebuild, and the client and the
-verifier follow it. This directory's `justfile` runs the same steps, with its key from `xark setup`.
+verifier follow it. This directory's `npm run build` runs the same steps, with its key from `xark setup`.
 
 ## Layout
 
 ```
-circuit/   the circuit crate: src/lib.rs, plain Rust, with its tests
-client/    the generated TypeScript client, and its test: prove, then verify on-chain
-program/   Pinocchio verifier: one verify call, minimal CU
-justfile   build · test · test-circuit
+circuit/       the circuit crate: src/lib.rs, plain Rust, with its tests
+client/        the generated TypeScript client, and its test: prove, then verify onchain
+program/       Pinocchio verifier: one verify call, minimal CU
+package.json   build · test:circuit · test
 ```
 
 Next → [02 · zkyc](../02-zkyc/)

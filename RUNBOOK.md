@@ -1,7 +1,7 @@
 # RUNBOOK - from zero to a verified proof
 
 The reproducible build and deployment path. If a command here disagrees with an example's
-`justfile`, the `justfile` is authoritative.
+`package.json` scripts, the scripts are authoritative: CI runs them.
 
 ## 1. Toolchain
 
@@ -12,7 +12,6 @@ The reproducible build and deployment path. If a command here disagrees with an 
 | xark crates, `@blueshift-gg/xark` | `0.3` | from crates.io and npm, through the manifests |
 | `cargo-build-sbf` | `4.2.0` | `cargo install cargo-build-sbf --version 4.2.0 --locked` |
 | Node | 22+ | [nodejs.org](https://nodejs.org) |
-| `just` | `1.43.1` | `cargo install just --version 1.43.1 --locked` |
 | Anchor, for deploy only | `1.1.2` | `avm install 1.1.2 && avm use 1.1.2` |
 
 No nightly Rust: xark 0.3 compiles circuits with your stable toolchain.
@@ -34,7 +33,7 @@ solana airdrop 2
 
 ## 2. One example's pipeline
 
-Each example's `just build` runs the same steps:
+Each example's `npm run build` runs the same steps:
 
 ```bash
 xark build <circuit>                        # Rust → wasm → R1CS: target/xark/<name>/
@@ -63,14 +62,20 @@ program assembles them in. `xark profile <circuit> --html` attributes every cons
 From the repository root:
 
 ```bash
-just fmt-check
-just test-circuits   # every circuit's own Rust tests
-just test            # build everything, then npm test: tsc + every client test, per example
-just clippy
-just check-clients   # the committed clients are current
+npm ci
+npm run build           # every example: circuits, keys, verifier crates, clients, programs
+npm run check:clients   # the committed clients are the ones the build generated
+npm run test:circuit    # every circuit's own Rust tests, then the programs' host tests
+npm test                # tsc + every client test, per example
+npm run fmt:check       # after the build: the programs' manifests name the verifier crates
+npm run clippy
 ```
 
-`just test` is the end-to-end test: each example's client proves in node through `@blueshift-gg/xark`, and
+Each runs the script of the same name in every example, in order; `cd <example>` and the same
+command runs just that one. CI ([`ci.yml`](./.github/workflows/ci.yml)) runs these steps in each
+example's directory, one job per example.
+
+`npm test` is the end-to-end test: each example's client proves in node through `@blueshift-gg/xark`, and
 the proof goes in a transaction to the example's program in LiteSVM (in-process, with the real
 `alt_bn128` syscalls; no validator or network).
 

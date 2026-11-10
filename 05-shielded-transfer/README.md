@@ -126,9 +126,9 @@ the public inputs the program assembles.
 ## Run it
 
 ```bash
-just build          # circuit → key → verifier crate → client → .so
-just test-circuit   # deposit, pay privately, and what's refused; then the program's host tests
-cd .. && npx vitest run 04   # prove with the client, transact onchain (LiteSVM)
+npm run build          # circuit → key → verifier crate → client → .so
+npm run test:circuit   # deposit, pay privately, and what's refused; then the program's host tests
+npm test               # prove with the client, transact onchain (LiteSVM)
 ```
 
 The [test](./client/shielded-transfer.test.ts) is the reference wallet: Alice shields 150, then

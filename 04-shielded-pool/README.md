@@ -120,9 +120,9 @@ program/             Pinocchio: verify both proofs, hold and pay lamports, track
 ## Run it
 
 ```bash
-just build          # both circuits → keys → verifier crates → clients → .so
-just test-circuit   # the tree's tests, each circuit's, then the program's
-cd .. && npx vitest run 03
+npm run build          # both circuits → keys → verifier crates → clients → .so
+npm run test:circuit   # the tree's tests, each circuit's, then the program's
+npm test               # deposit, withdraw through a relayer, onchain (LiteSVM)
 ```
 
 The [test](./client/shielded-pool.test.ts) is the reference wallet and client: two deposits, a path

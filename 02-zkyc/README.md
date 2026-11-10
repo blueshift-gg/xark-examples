@@ -225,9 +225,9 @@ node, the whole instruction in LiteSVM.
 ## Run it
 
 ```bash
-just build          # circuit → key → verifier crate → client → .so
-just test-circuit   # who passes, who doesn't; then the program's policy and packing
-cd .. && npx vitest run 02   # issue, prove with the client, verify onchain (LiteSVM)
+npm run build          # circuit → key → verifier crate → client → .so
+npm run test:circuit   # who passes, who doesn't; then the program's policy and packing
+npm test               # issue, prove with the client, verify onchain (LiteSVM)
 ```
 
 Next → [03 · Token claim](../03-token-claim/)

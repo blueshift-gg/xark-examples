@@ -41,7 +41,7 @@ export function artifacts(crate: string, name: string) {
  * xark proving across a pool of worker threads: pass `{ wasm }` to a client's
  * `prover`, and `terminate` when done. The same proofs and errors, about 4× faster
  * on 8 threads for 05's circuit. `proveStreaming` streams the constraint rows from
- * `circuit.xbc`, so the keys are made `--r1cs-form reduced` (the justfiles do). In a browser the
+ * `circuit.xbc`, so the keys are made `--r1cs-form reduced` (the build scripts do). In a browser the
  * pool needs a cross-origin-isolated page; see `@blueshift-gg/xark`'s README.
  */
 export async function pooled(threads = 8) {

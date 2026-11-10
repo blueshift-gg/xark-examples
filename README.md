@@ -63,13 +63,14 @@ transaction, so a proof only holds for what the program says is true, and makes 
 ## Run it
 
 ```bash
-npm install
-just test   # every example: circuit → keys → verifier → client → program, then the client tests
+npm ci          # one install for every example: the root is an npm workspace
+npm run build   # every example: circuit → keys → verifier → client → program
+npm test        # every example's client tests: prove, then verify onchain
 ```
 
-Or one example: `cd 02-zkyc && just test`. Each example is its own project, with its
+Or one example: `cd 02-zkyc && npm run build && npm test`. Each example is its own project, with its
 own `package.json` and tests, so you can copy one out and start from it (05 also takes 04's
-`circuits/pool` crate). Prerequisites (stable Rust, `cargo-build-sbf`, Node, `just`, and xark):
+`circuits/pool` crate). Prerequisites (stable Rust, `cargo-build-sbf`, Node, and xark):
 [RUNBOOK.md](./RUNBOOK.md); `xark doctor` checks the Rust and xark side. Each example's README walks
 its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
 
@@ -97,7 +98,7 @@ verified through the same `alt_bn128` syscalls mainnet uses, with no validator a
 tests cover the happy path and the refusals: a tampered proof, a proof for yesterday, a proof
 submitted by someone else, a stranger's note, a redirected withdrawal or fee, a double spend. When inputs can't be proved, the client says which
 line of the circuit fails (`CheckFailed`, with the source line). Each circuit also has its own Rust
-tests (`just test-circuits`).
+tests (`npm run test:circuit`).
 
 ```
  ✓ client/over-9000.test.ts (2 tests)

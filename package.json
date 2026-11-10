@@ -9,6 +9,12 @@
     "05-shielded-transfer"
   ],
   "scripts": {
-    "test": "npm test --workspaces"
+    "build": "npm run build --workspaces",
+    "test:circuit": "npm run test:circuit --workspaces",
+    "test": "npm test --workspaces",
+    "fmt:check": "npm run fmt:check --workspaces",
+    "clippy": "npm run clippy --workspaces",
+    "check:clients": "npm run check:clients --workspaces",
+    "clean": "npm run clean --workspaces"
   }
 }

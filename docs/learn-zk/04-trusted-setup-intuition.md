@@ -26,7 +26,7 @@ Two phases:
 
 ## What this means for the examples
 
-The example justfiles run:
+Each example's `npm run build` runs:
 
 ```bash
 xark setup <circuit-dir> --r1cs-form reduced

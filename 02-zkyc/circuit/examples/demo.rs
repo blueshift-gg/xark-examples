@@ -1,6 +1,6 @@
 //! A compliant holder checked on 2026-10-22 against the program's policy: proved as
 //! the verifier crate's self-test vector (`proof.bin`, `public_inputs.bin`, as `xark
-//! prove` writes them). `just build` runs it after `xark setup`. The program's tests
+//! prove` writes them). `npm run build` runs it after `xark setup`. The program's tests
 //! verify this proof against the public inputs the program assembles.
 use xark::Field;
 use xark::prelude::Country::*;

@@ -1,6 +1,6 @@
 //! A list of one claim, 1000 tokens for the wallet `[7; 32]`, claimed: proved as the
 //! verifier crate's self-test vector (`proof.bin`, `public_inputs.bin`, as `xark
-//! prove` writes them). `just build` runs it after `xark setup`.
+//! prove` writes them). `npm run build` runs it after `xark setup`.
 use token_claim::{Claim, Path, TokenClaimInputs};
 
 fn main() {

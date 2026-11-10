@@ -17,18 +17,19 @@ import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budge
 import { AccountState, TOKEN_PROGRAM_ADDRESS, getMintEncoder, getMintSize, getTokenDecoder, getTokenEncoder, getTokenSize } from "@solana-program/token";
 import type { LiteSVM } from "litesvm";
 import { createHash } from "node:crypto";
-import { anchorData, artifacts, funded, pooled, send, u64le, vm } from "./harness";
+import { artifacts, funded, instructionData, pooled, send, u64le, vm } from "./harness";
 import { Field, Key, Path, ShieldedTransact, Transaction, type Note, type PathValue, type ShieldedTransactProver, type Spend } from "./shielded_transact";
 
 const program = address("CUCcJJBRbK6tK4nPP2zgmvdYbKWSCGGVdRegtJ2GPJtF");
 const system = address("11111111111111111111111111111111");
-const rent = address("SysvarRent111111111111111111111111111111111");
+/** The program's instruction tags. */
+const [INITIALIZE, TRANSACT] = [0, 1];
 const bytes = (a: Address) => new Uint8Array(getAddressEncoder().encode(a));
 const random = () => new Field(crypto.getRandomValues(new Uint8Array(31)));
 const signer = (s: KeyPairSigner) => ({ address: s.address, role: AccountRole.WRITABLE_SIGNER, signer: s });
 const writable = (a: Address) => ({ address: a, role: AccountRole.WRITABLE });
 const readonly = (a: Address) => ({ address: a, role: AccountRole.READONLY });
-/** A Borsh `Vec<u8>`: its length as a `u32`, then its bytes. */
+/** A memo as the program reads it: its length as a `u32`, then its bytes. */
 const vec = (b: Uint8Array) => new Uint8Array([...new Uint8Array(new Uint32Array([b.length]).buffer), ...b]);
 
 /** A memo's SHA-256, as the circuit's `Hash` takes it and the program computes it. */
@@ -60,13 +61,13 @@ async function pool() {
   const [vault] = await getProgramDerivedAddress({ programAddress: program, seeds: ["vault", bytes(mint)] });
   await send(svm, payer, {
     programAddress: program,
-    accounts: [writable(poolAddress), writable(vault), readonly(mint), signer(payer), readonly(TOKEN_PROGRAM_ADDRESS), readonly(system), readonly(rent)],
-    data: anchorData("initialize"),
+    accounts: [writable(poolAddress), writable(vault), readonly(mint), signer(payer), readonly(TOKEN_PROGRAM_ADDRESS), readonly(system)],
+    data: instructionData(INITIALIZE),
   });
   // The program's empty root is the circuit's: the first path's tree root.
   const account = svm.getAccount(poolAddress);
   const tip = Path.first();
-  expect(account.exists && account.data.subarray(48, 80)).toEqual(tip.treeRoot().toBytes());
+  expect(account.exists && account.data.subarray(40, 72)).toEqual(tip.treeRoot().toBytes());
   return { svm, mint, poolAddress, vault, tip, held: [] as Owned[] };
 }
 type Pool = Awaited<ReturnType<typeof pool>>;
@@ -100,8 +101,8 @@ const pay = (owner: Key, value: bigint) => {
 };
 
 /**
- * A transact comes close to the default 200k compute units: measured at 179k to
- * 185k, varying with its public inputs (the verifier skips the scalar multiplication
+ * A transact comes close to the default 200k compute units: measured at 168k to
+ * 174k, varying with its public inputs (the verifier skips the scalar multiplication
  * for a small one). Ask for 250k.
  */
 const budget = getSetComputeUnitLimitInstruction({ units: 250_000 });
@@ -120,8 +121,8 @@ interface Moves {
  * One transaction, proved: `key` spends `spends` and creates `outputs` (each with its
  * owner's diversifier). `instruction()` is what to send; `landed()` records it in
  * every wallet once it has. An account a transaction doesn't move tokens with is
- * left out: its slot holds the program's address (Anchor's "none"), and the proof
- * binds the program's address in its place.
+ * left out: its slot holds the program's address, which the program reads as none,
+ * and the proof binds the program's address in its place.
  */
 async function prepare(p: Pool, key: Key, spends: [Spend, Spend], outputs: [Output, Output], moves: Moves = {}) {
   const { vpubIn = 0n, vpubOut = 0n, fee = 0n } = moves;
@@ -144,8 +145,8 @@ async function prepare(p: Pool, key: Key, spends: [Spend, Spend], outputs: [Outp
         optional(accounts.userToken), optional(accounts.recipient), optional(accounts.relayerToken),
         readonly(TOKEN_PROGRAM_ADDRESS), readonly(system),
       ],
-      data: anchorData(
-        "transact", proof.toBytes(), tx.root.toBytes(), ...tx.nullifiers.map((n) => n.toBytes()), ...tx.commitments.map((c) => c.toBytes()),
+      data: instructionData(
+        TRANSACT, proof.toBytes(), tx.root.toBytes(), ...tx.nullifiers.map((n) => n.toBytes()), ...tx.commitments.map((c) => c.toBytes()),
         tx.newRoot.toBytes(), u64le(vpubIn), u64le(vpubOut), u64le(fee), vec(memos[0]), vec(memos[1]),
       ),
     }),
@@ -206,7 +207,7 @@ test("deposit, pay privately, withdraw, through a relayer", async () => {
   expect(balance(p.svm, p.vault)).toBe(45n); // Alice's change, still shielded
 
   // Bob's note is spent: its nullifier exists, so it can't come out twice.
-  await expect(send(p.svm, relayer, budget, withdrawal.instruction(relayer))).rejects.toThrow(/already in use/);
+  await expect(send(p.svm, relayer, budget, withdrawal.instruction(relayer))).rejects.toThrow(/NullifierSpent/);
 });
 
 test("only a note's owner can spend it", async () => {

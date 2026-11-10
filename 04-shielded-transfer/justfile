@@ -1,5 +1,5 @@
 # shielded-transfer: the transact circuit → keys → verifier crate → TS client
-# → one Anchor + SPL program. Prerequisites: ../RUNBOOK.md. The root `just test`
+# → one Pinocchio + SPL program. Prerequisites: ../RUNBOOK.md. The root `just test`
 # runs client/ against the program.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
@@ -15,13 +15,18 @@ build:
     xark client circuits/transact --out client/
     cd program && cargo build-sbf --arch v3
 
-# The circuit's own tests: deposit, pay privately, and what's refused.
+# The circuit's own tests (deposit, pay privately, and what's refused), then the
+# program's: each account check refuses on fake accounts, and the demo proof
+# verifies against the public inputs it assembles. The program's need `build`
+# first (the verifier crate).
 test-circuit:
     xark test circuits/transact
+    cd program && cargo test -q --release
 
-# Build, then prove with the client and verify on-chain (LiteSVM). `npm install` first.
-test: build
+# Build, then every test: the circuit's, the program's, and the client's, which
+# proves with the client and transacts onchain (LiteSVM). `npm install` first.
+test: build test-circuit
     npm test
 
 clean:
-    rm -rf circuits/transact/target program/target program/.anchor
+    rm -rf circuits/transact/target program/target

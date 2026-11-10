@@ -49,8 +49,8 @@ The [program](./program/src/lib.rs) is one call to the verifier crate `xark expo
 
 It proves someone knows *a* value `> 9000`. It doesn't tie that value to anything: a prover just
 picks 9001. A bare range proof is a mechanism, not an application. Bind the hidden value to a
-published commitment ([02](../02-age-verification/)) or a Merkle tree of deposits
-([03](../03-shielded-pool/)) and the same check becomes an age gate or a private balance.
+published commitment ([02](../02-zkyc/)) or a Merkle tree of deposits
+([03](../03-shielded-pool/)) and the same check becomes a KYC gate or a private balance.
 
 ## Run it
 
@@ -171,4 +171,4 @@ program/   Pinocchio verifier: one verify call, minimal CU
 justfile   build · test · test-circuit
 ```
 
-Next → [02 · Age verification](../02-age-verification/)
+Next → [02 · zkyc](../02-zkyc/)

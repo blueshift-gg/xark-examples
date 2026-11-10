@@ -11,8 +11,8 @@ node_modules/
 Cargo.lock
 !01-over-9000/circuit/Cargo.lock
 !01-over-9000/program/Cargo.lock
-!02-age-verification/circuit/Cargo.lock
-!02-age-verification/program/Cargo.lock
+!02-zkyc/circuit/Cargo.lock
+!02-zkyc/program/Cargo.lock
 !03-shielded-pool/circuits/deposit/Cargo.lock
 !03-shielded-pool/circuits/pool/Cargo.lock
 !03-shielded-pool/circuits/withdraw/Cargo.lock

@@ -1,6 +1,6 @@
-# The age-verification circuit: an ordinary Rust crate that xark compiles to R1CS.
+# The zkyc circuit: an ordinary Rust crate that xark compiles to R1CS.
 [package]
-name = "age_verification"
+name = "zkyc"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"

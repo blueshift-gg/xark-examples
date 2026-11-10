@@ -4,7 +4,7 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-examples := "01-over-9000 02-age-verification 03-shielded-pool 04-shielded-transfer"
+examples := "01-over-9000 02-zkyc 03-shielded-pool 04-shielded-transfer"
 
 # Build everything, then run every example's client tests.
 test: build

@@ -26,7 +26,7 @@ the examples below are that choice made four ways.
 | Example | Proves | New idea | Public inputs | On-chain |
 |---|---|---|:-:|---|
 | [01 · over-9000](./01-over-9000/) | a secret value is `> 9000` | range proofs, the whole loop | 0 | Pinocchio |
-| [02 · age-verification](./02-age-verification/) | 18 or older today, without a birth date | commitments, typed policies, binding the signer | 4 | Pinocchio |
+| [02 · zkyc](./02-zkyc/) | a committed identity meets the program's KYC policy, revealing none of it | commitments, typed inputs, packing, a policy as a public input, binding the signer | 5 | Pinocchio |
 | [03 · shielded-pool](./03-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado) | Merkle paths, nullifiers, a wallet in Rust | 4 + 7 | Anchor |
 | [04 · shielded-transfer](./04-shielded-transfer/) | a private payment of any amount (Zcash-style) | notes, keys, JoinSplit, SPL, relayers | 21 | Anchor + SPL |
 
@@ -46,12 +46,13 @@ the examples below are that choice made four ways.
   Solana program     verify(proof, public inputs) via the native alt_bn128 syscalls
 ```
 
-From [02's test](./02-age-verification/client/age-verification.test.ts), the whole app side:
+From [02's test](./02-zkyc/client/zkyc.test.ts), the whole app side:
 
 ```ts
-const prover = await AgeVerification.prover("/circuits/age_verification/", { digest: AgeVerification.digest });
+const prover = await Zkyc.prover("/circuits/zkyc/", { digest: Zkyc.digest });
 const commitment = Identity.commitment(id);   // the circuit crate's Rust, run from TypeScript
-const proof = prover.prove({ id, commitment, policy: Policy.adultOn(new Date()), holder: walletBytes });
+const policy = Policy.default().on(new Date()).minAge(18).worthAtLeast(500_000).nationalities(["DE", "FR", "GB", "US"]);
+const proof = prover.prove({ id, commitment, policy, holder: walletBytes });
 // → a transaction signed by the holder, data: proof.toBytes() ‖ commitment.toBytes()
 ```
 
@@ -66,7 +67,7 @@ npm install
 just test   # every example: circuit → keys → verifier → client → program, then the client tests
 ```
 
-Or one example: `cd 02-age-verification && just test`. Each example is its own project, with its
+Or one example: `cd 02-zkyc && just test`. Each example is its own project, with its
 own `package.json` and tests, so you can copy one out and start from it (04 also takes 03's
 `circuits/pool` crate). Prerequisites (stable Rust, `cargo-build-sbf`, Node, `just`, and xark):
 [RUNBOOK.md](./RUNBOOK.md); `xark doctor` checks the Rust and xark side. Each example's README walks
@@ -77,7 +78,7 @@ its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
 | Circuit | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | On-chain CU |
 |---|--:|--:|--:|--:|--:|
 | 01 `over_9000` | 128 | 0 | 20 ms | 9 ms | 73,912 |
-| 02 `age_verification` | 293 | 4 | 72 ms | 24 ms | 95,668 |
+| 02 `zkyc` | 1,350 | 5 | 211 ms | 70 ms | 100,204 |
 | 03 `shielded_pool_deposit` | 9,647 | 4 | 1,635 ms | 403 ms | 96,766–97,349 |
 | 03 `shielded_pool_withdraw` | 5,382 | 7 | 920 ms | 180 ms | 119,607 |
 | 04 `shielded_transact` | 26,123 | 19 | 3,736 ms | 896 ms | 178,956–184,956 |
@@ -100,7 +101,7 @@ tests (`just test-circuits`).
 
 ```
  ✓ client/over-9000.test.ts (2 tests)
- ✓ client/age-verification.test.ts (2 tests)
+ ✓ client/zkyc.test.ts (3 tests)
  ✓ client/shielded-pool.test.ts (2 tests)
  ✓ client/shielded-transfer.test.ts (2 tests)
 ```

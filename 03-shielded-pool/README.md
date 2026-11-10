@@ -3,7 +3,7 @@
 Deposit a fixed amount, then withdraw it to a fresh address so that nobody can link the withdrawal
 to the deposit. On-chain an observer sees a deposit and, later, an unrelated-looking withdrawal.
 This is the first real privacy primitive in the ladder: it combines proofs ([01](../01-over-9000/))
-and commitments ([02](../02-age-verification/)) with Merkle membership and nullifiers.
+and commitments ([02](../02-zkyc/)) with Merkle membership and nullifiers.
 
 > **Reference implementation. Unaudited. Educational.** Mixers carry real legal and regulatory weight
 > depending on where you are. For anything that holds value, use keys from a multi-party

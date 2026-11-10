@@ -15,7 +15,7 @@ birthday, address, and document number. That's *way* more than the claim.
 A ZK proof lets you hand over a small blob of bytes that convinces a verifier "this person is 18+"
 and **nothing else**. No birthday. No name. The verifier checks the blob and gets a yes/no.
 
-You'll build exactly this in [example 02](../../02-age-verification/).
+You'll build this, and more (net worth, nationality, a valid document), in [example 02](../../02-zkyc/).
 
 ## Three roles
 

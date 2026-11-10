@@ -16,8 +16,8 @@ and `require*`. Use `xark check` continuously: an unsupported Rust construct sho
 not worked around.
 
 **Step 3 - Build with commitments.**
-[Example 02](../../02-age-verification/) turns a bare range proof into a claim about a specific
-committed value. Most useful ZK applications need this kind of binding.
+[Example 02](../../02-zkyc/) turns a bare range proof into a claim about a specific
+committed identity, checked against a policy the program picks. Most useful ZK applications need this kind of binding.
 
 **Step 4 - Study stateful privacy.**
 [Example 03](../../03-shielded-pool/) adds Merkle membership, nullifiers, recent roots, and real

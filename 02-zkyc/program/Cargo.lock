@@ -3,32 +3,6 @@
 version = 4
 
 [[package]]
-name = "age-verification-program"
-version = "0.1.0"
-dependencies = [
- "age-verification-xark-verifier",
- "age_verification",
- "pinocchio",
- "xark",
-]
-
-[[package]]
-name = "age-verification-xark-verifier"
-version = "0.1.0"
-dependencies = [
- "xark-verifier",
-]
-
-[[package]]
-name = "age_verification"
-version = "0.1.0"
-dependencies = [
- "xark",
- "xark-hash",
- "xark-poseidon2",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1451,6 +1425,32 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+
+[[package]]
+name = "zkyc"
+version = "0.1.0"
+dependencies = [
+ "xark",
+ "xark-hash",
+ "xark-poseidon2",
+]
+
+[[package]]
+name = "zkyc-program"
+version = "0.1.0"
+dependencies = [
+ "pinocchio",
+ "xark",
+ "zkyc",
+ "zkyc-xark-verifier",
+]
+
+[[package]]
+name = "zkyc-xark-verifier"
+version = "0.1.0"
+dependencies = [
+ "xark-verifier",
+]
 
 [[package]]
 name = "zmij"

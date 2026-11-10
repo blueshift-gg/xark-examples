@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": [
     "01-over-9000",
-    "02-age-verification",
+    "02-zkyc",
     "03-shielded-pool",
     "04-shielded-transfer"
   ],

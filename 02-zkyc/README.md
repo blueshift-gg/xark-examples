@@ -181,9 +181,23 @@ refuses such a circuit. `bind(holder)` is the fix: one constraint per half, Torn
 
 ## The program supplies the rest
 
-The [program](./program/src/lib.rs) takes the holder as its signer and `proof ‖ commitment` as
-instruction data, and assembles every other public input itself. Its policy is three constants and
-the clock:
+The [program](./program/src/) has one instruction, `VerifyKyc`: the holder signs, and the instruction
+data is its discriminator `0`, then `proof ‖ commitment`. It assembles every other public input
+itself.
+
+```
+program/src/
+  lib.rs                      entrypoint: dispatch on the discriminator, log the error's name
+  instructions/verify_kyc.rs  the accounts (the holder, a signer), the data, verify
+  policy.rs                   the program's policy, packed as the circuit takes it, and the calendar
+  errors.rs                   ZkycError::InvalidProof (0)
+  tests.rs                    host tests
+```
+
+A missing account, an unsigned holder or malformed data fail with Solana's built-in errors
+(`NotEnoughAccountKeys`, `MissingRequiredSignature`, `InvalidInstructionData`); a proof that
+doesn't verify is the program's own `InvalidProof`, custom error 0, whose name it logs. Its policy
+is three constants and the clock:
 
 ```rust
 const MIN_AGE: i64 = 18;
@@ -213,7 +227,7 @@ naming the line.
 const commitment = Identity.commitment(id);   // the issuer's
 const policy = Policy.default().on(new Date()).minAge(18).worthAtLeast(500_000).nationalities(["DE", "FR", "GB", "US"]);
 const proof = prover.prove({ id, commitment, policy, holder: walletBytes });
-// a transaction signed by the holder, data: proof.toBytes() ‖ commitment.toBytes()
+// a transaction signed by the holder, data: [0] ‖ proof.toBytes() ‖ commitment.toBytes()
 ```
 
 A proof is made for a UTC day: one that lands after midnight UTC needs proving again.
@@ -234,7 +248,7 @@ owner sets, and pack it the same way.
 
 | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | Onchain CU |
 |--:|--:|--:|--:|--:|
-| 1,350 | 5 | 211 ms | 70 ms | 100,204 |
+| 1,350 | 5 | 211 ms | 70 ms | 100,203 |
 
 Measured as in the [root README](../README.md#numbers): `xark inspect`, the generated client in
 node, the whole instruction in LiteSVM.

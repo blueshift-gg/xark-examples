@@ -6,6 +6,13 @@ Zero-knowledge circuits written in **ordinary Rust**, proved in **TypeScript**, 
 introducing one new idea. Every one runs end to end in its tests: the generated TypeScript client
 proves, and the proof goes in a transaction to the example's program in an in-process Solana VM.
 
+They tell one story. A prime field has no order, so a circuit compares numbers by proving them
+small, bit by bit: Over 9000 teaches that **range proof**. zKYC puts range proofs to work on an age
+and a net worth, beside an allow-list check and a salted commitment. Token claim brings **Merkle
+trees** into the circuit. Shielded pool puts zKYC's salted commitments in a Merkle tree, with
+nullifiers, so a withdrawal is unlinkable to its deposit. Shielded transfer adds range proofs back:
+notes of any amount, each range-checked so value can't be minted by wrapping the field.
+
 New to zero-knowledge? Start with the [from-zero primer](./docs/learn-zk/), the mental model
 before any code.
 
@@ -25,11 +32,11 @@ the examples below are that choice made five ways.
 
 | Example | Proves | New idea | Public inputs | Onchain |
 |---|---|---|:-:|---|
-| [01 · over-9000](./01-over-9000/) | a secret value is `> 9000` | range proofs, the whole loop | 0 | Pinocchio |
-| [02 · zkyc](./02-zkyc/) | a committed identity meets the program's KYC policy, revealing none of it | commitments, typed inputs, packing, a policy as a public input, binding the signer | 5 | Pinocchio |
-| [03 · token-claim](./03-token-claim/) | an address is on a list of a million, for its amount, and claims it once (a Merkle airdrop) | a Merkle path as a private input | 4 | Pinocchio + SPL |
-| [04 · shielded-pool](./04-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado) | nullifiers, a tree the program grows, a wallet in Rust | 4 + 7 | Pinocchio |
-| [05 · shielded-transfer](./05-shielded-transfer/) | a private payment of any amount (Zcash-style) | notes, keys, JoinSplit, SPL, relayers | 19 | Pinocchio + SPL |
+| [01 · over-9000](./01-over-9000/) | a secret value is `> 9000` | range proofs: a field has no order, so compare by bit decomposition; the whole loop | 0 | Pinocchio |
+| [02 · zKYC](./02-zkyc/) | a committed identity meets the program's KYC policy, revealing none of it | range proofs put to work (age, net worth), an allow-list that hides which country, a salted commitment, binding the signer | 5 | Pinocchio |
+| [03 · token-claim](./03-token-claim/) | an address is on a list of a million, for its amount, and claims it once (a Merkle airdrop) | Merkle trees in a circuit: a leaf of address and amount, the path private | 4 | Pinocchio + SPL |
+| [04 · shielded-pool](./04-shielded-pool/) | an unlinkable deposit → withdrawal (multi-denomination Tornado) | Merkle trees plus salted commitments: notes and nullifiers, a tree the program grows | 4 + 7 | Pinocchio |
+| [05 · shielded-transfer](./05-shielded-transfer/) | a private payment of any amount (Zcash-style) | Merkle trees and range proofs together: range-checked amounts so the sums can't wrap; notes, keys, JoinSplit, SPL | 19 | Pinocchio + SPL |
 
 ## How it fits together
 

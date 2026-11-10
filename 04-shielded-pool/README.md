@@ -3,9 +3,12 @@
 Deposit a fixed amount, then withdraw it to a fresh address so that nobody can link the withdrawal
 to the deposit. Onchain, an observer sees a deposit and, later, an unrelated-looking withdrawal.
 This is the first real privacy primitive in the ladder: [03](../03-token-claim/) hid the path but
-not who claimed, and a nullifier hides that too. It combines proofs ([01](../01-over-9000/)),
-commitments ([02](../02-zkyc/)) and a Merkle path as a private input ([03](../03-token-claim/)) with
-nullifiers, in a tree that grows with every deposit.
+not who claimed, and a nullifier hides that too. It's [03](../03-token-claim/)'s **Merkle tree**
+with [02](../02-zkyc/)'s **salted commitments** as its leaves, plus nullifiers, in a tree that grows
+with every deposit. Range proofs play only a supporting role: they bound the relayer's `fee` (a
+`u64`, which the program also checks is at most the denomination) and the leaf index (a `u32`,
+bounded below 2^20 as its bits steer the path). Amounts need none, since every note in a pool is the
+same denomination; [05](../05-shielded-transfer/) is where range proofs become essential.
 
 > **Reference implementation. Unaudited. Educational.** Mixers carry real legal and regulatory weight
 > depending on where you are. For anything that holds value, use keys from a multi-party

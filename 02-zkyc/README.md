@@ -1,11 +1,13 @@
-# 02 · zkyc: prove you pass KYC without showing your ID
+# 02 · zKYC: prove you pass KYC without showing your ID
 
 Prove to a Solana program that you meet its KYC policy (18 or older today, worth at least 500,000,
 a national of a country it allows, holding a document that hasn't expired), revealing nothing
 else: not your birth date, your net worth, your nationality or your document number. This is
-[01](../01-over-9000/)'s range proof pointed at something real, and three things make it real: a
-**commitment**, so the identity can't be made up; the **program's policy**, so the rules can't
-either; and the **signer**, so the proof can't be borrowed.
+[01](../01-over-9000/)'s range proof put to work: the age is a range proof on dates, the minimum
+net worth one on amounts. Three more tools keep the rest private: an **allow-list check**, so the
+program learns your country is on its list but not which one; a **salted commitment**, so the
+identity can't be made up and its only trace onchain reveals nothing; and the **signer**, so the
+proof can't be borrowed. The **program's policy** makes sure the rules can't be made up either.
 
 ## Commit once, prove many times
 
@@ -81,7 +83,22 @@ and the tests.
 
 The first requirement is the load-bearing one: it binds every other check to a *specific published
 commitment*, so unlike 01 you can't pick convenient values. You have to know the opening of a
-commitment someone already trusts.
+commitment someone already trusts. Each other line proves a rule and hides the value it checks:
+
+- **Age is a range proof on dates.** A `Day` is a day count since 1900-01-01, range-checked to 17
+  bits on entry, so `id.born <= policy.born_by` is 01's comparison on two 17-bit numbers. The
+  verifier learns "born on or before `born_by`", never the birth date. The expiry check works the
+  same way.
+- **Minimum net worth is a 64-bit range proof.** `id.net_worth >= policy.min_net_worth` proves at
+  least the minimum, never the amount.
+- **The allow-list hides which country.** `require_in` splits the public `Bitfield` into one bit per
+  country and multiplies one factor per country, each zero only where the private `Choice` is that
+  country and its bit is set; the product must be zero. The verifier sees the allowed set, not
+  which member of it you are.
+
+What goes onchain is the proof and the commitment, in the instruction data, and the holder's
+address as the signer. The program stores nothing; the identity and its salt stay with the holder
+and the issuer.
 
 The idea to carry forward: **a ZK proof guarantees consistency, not honesty.** It proves the
 identity inside the commitment meets the policy; it says nothing about whether the commitment is
@@ -230,4 +247,4 @@ npm run test:circuit   # who passes, who doesn't; then the program's policy and 
 npm test               # issue, prove with the client, verify onchain (LiteSVM)
 ```
 
-Next → [03 · Token claim](../03-token-claim/)
+Next → [03 · Token claim](../03-token-claim/): Merkle trees in a circuit

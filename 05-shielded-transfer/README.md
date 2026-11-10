@@ -6,6 +6,13 @@ how much. Where [04](../04-shielded-pool/) is a fixed-denomination mixer, this i
 Zcash/Sapling-style shielded pool: notes with hidden values, a key hierarchy, and shielded→shielded
 transfers.
 
+It's where **Merkle trees and range proofs** come together. Notes live in 04's tree, and they carry
+arbitrary amounts, so every amount is a range-checked `u64` ([01](../01-over-9000/)'s idea).
+That's the crux: the balance check is an equation in a prime field, where arithmetic wraps. Without
+the range checks, a note worth `p − 1` would act as −1, and a transaction could create value from
+nothing. With them, each side sums at most four values below 2⁶⁴, far below `p`, so the field
+equation is the integer one.
+
 > **Educational reference, not an audited product.** It uses development setup keys and
 > deliberately omits wallet, ceremony, governance, and compliance infrastructure.
 

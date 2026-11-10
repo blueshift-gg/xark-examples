@@ -3,8 +3,10 @@
 A distributor publishes one 32-byte root for a list of `(address, amount)` pairs and funds a vault of
 an SPL token. Each address on the list proves it's there, for its amount, and the program pays it,
 once. [02](../02-zkyc/) proved something about one committed value; this proves
-membership in a list of a million, with the same constant-size proof. Its one new idea is **a Merkle
-path as a private input**.
+membership in a list of a million, with the same constant-size proof. Its one new idea is **the
+Merkle tree in a circuit**: each leaf is the Poseidon2 hash of a claimant's Solana address (as two
+halves) and the amount they're owed, and the claimant proves their leaf is under the published root
+with the path as a private input. That proof is what entitles them to claim the amount.
 
 > **Educational reference, not an audited product.** It uses a single-party setup key; for anything
 > that holds value, use keys from a multi-party ceremony (`xark ceremony`).
@@ -271,4 +273,4 @@ integer, as a little-endian field element.
 | `InvalidAccountData` | the distributor isn't one `initialize` made |
 | `MissingRequiredSignature` | the authority or the claimant didn't sign |
 
-Next → [04 · Shielded pool](../04-shielded-pool/)
+Next → [04 · Shielded pool](../04-shielded-pool/): Merkle trees plus salted commitments

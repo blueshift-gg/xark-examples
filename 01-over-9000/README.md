@@ -1,8 +1,12 @@
 # 01 · Over 9000: a range proof
 
-Prove you know a secret number greater than 9000, revealing nothing else. It's the smallest circuit
-that still does something real, the range-proof mechanism under every later example, and the whole
-xark loop in miniature: Rust circuit → Solana verifier → TypeScript client → proof on-chain.
+Prove you know a secret number greater than 9000, revealing nothing else. It teaches the **range
+proof**. A circuit computes in a prime field, which has no "less than": arithmetic wraps at `p`, so
+`0 − 1` is the largest value there is. To compare numbers, the circuit first proves they're small,
+by splitting each into bits and checking every bit; then order means what it should. That trick is
+under every age, balance and price check in the later examples. This is the smallest circuit that
+still does something real, and the whole xark loop in miniature: Rust circuit → Solana verifier →
+TypeScript client → proof onchain.
 
 ## The circuit
 
@@ -173,4 +177,4 @@ program/       Pinocchio verifier: one verify call, minimal CU
 package.json   build · test:circuit · test
 ```
 
-Next → [02 · zkyc](../02-zkyc/)
+Next → [02 · zKYC](../02-zkyc/): range proofs put to work

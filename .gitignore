@@ -13,6 +13,8 @@ Cargo.lock
 !01-over-9000/program/Cargo.lock
 !02-zkyc/circuit/Cargo.lock
 !02-zkyc/program/Cargo.lock
+!03-token-claim/circuit/Cargo.lock
+!03-token-claim/program/Cargo.lock
 !03-shielded-pool/circuits/deposit/Cargo.lock
 !03-shielded-pool/circuits/pool/Cargo.lock
 !03-shielded-pool/circuits/withdraw/Cargo.lock

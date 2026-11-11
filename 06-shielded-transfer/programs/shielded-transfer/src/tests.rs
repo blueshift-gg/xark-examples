@@ -5,7 +5,7 @@
 use crate::{ID as PROGRAM, errors::ShieldedTransferError, instructions::*, state::*};
 use pinocchio::{AccountView, Address, account::RuntimeAccount, error::ProgramError};
 use pinocchio_token::state::{Account as TokenAccount, Mint};
-use shielded_transfer_transact_xark_verifier::{NUM_PUBLIC_INPUTS, Proof, verify};
+use shielded_transact_verifier::{Fields, Proof, verify};
 use solana_sha256_hasher::hash;
 const MINT: Address = Address::new_from_array([7; 32]);
 
@@ -559,69 +559,68 @@ fn the_ring_remembers_sixteen_roots() {
 /// another recipient, relayer, asset, amount or memo.
 #[test]
 fn the_demo_proof_verifies_against_what_the_program_assembles() {
-    let dir = "../circuits/transact/shielded_transact-verifier";
+    // The sample `xark build` bundles in the verifier crate, from `examples/demo.rs`.
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../clients/shielded_transact/rust"
+    );
     let proof: [u8; 256] = std::fs::read(format!("{dir}/proof.solana.bin"))
         .unwrap()
         .try_into()
         .unwrap();
     let want = std::fs::read(format!("{dir}/public_inputs.solana.bin")).unwrap();
-    let want: Vec<[u8; 32]> = want.chunks(32).map(|c| c.try_into().unwrap()).collect();
-    assert_eq!(want.len(), NUM_PUBLIC_INPUTS);
+    let want: Fields = want
+        .chunks(32)
+        .map(|c| c.try_into().unwrap())
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
     let proof = Proof::from_le_bytes(&proof);
 
     let data = pool_data();
     let pool = Pool::load(&data).unwrap();
-    let memos = [[1u8; 32], [2u8; 32]];
-    let ix = |vpub_in: u64| {
-        let mut ix = proof_args(&want);
-        ix.extend_from_slice(&vpub_in.to_le_bytes());
-        ix.extend_from_slice(&[0; 16]);
-        ix
-    };
     // The demo binds its memos' hashes directly; the program hashes what it's sent,
     // so assemble with the hashes in place to compare.
     let assemble = |vpub_in: u64, recipient: &[u8; 32], relayer: &[u8; 32]| {
-        let mut ix = ix(vpub_in);
-        for _ in &memos {
-            ix.extend_from_slice(&0u32.to_le_bytes());
-        }
+        let mut ix = proof_args(&want);
+        ix.extend_from_slice(&vpub_in.to_le_bytes());
+        ix.extend_from_slice(&[0; 16]);
+        ix.extend_from_slice(&[0; 8]); // two empty memos
         let args = TransactInstructionData::try_from(&ix[..]).unwrap();
         let mut inputs = public_inputs(pool, &args, recipient, relayer);
-        for (i, memo) in memos.iter().enumerate() {
-            [inputs[15 + 2 * i], inputs[16 + 2 * i]] = halves(memo);
-        }
+        inputs.tx.memos = [[1; 32], [2; 32]];
         inputs
     };
     let inputs = assemble(150, &[9; 32], &[8; 32]);
-    assert_eq!(inputs.as_slice(), want.as_slice());
-    assert!(verify(&proof, &inputs));
-    assert!(!verify(&proof, &assemble(150, &[8; 32], &[8; 32])));
-    assert!(!verify(&proof, &assemble(150, &[9; 32], &[9; 32])));
-    assert!(!verify(&proof, &assemble(151, &[9; 32], &[8; 32])));
+    assert_eq!(inputs.to_fields(), want);
+    assert!(verify(&proof, inputs));
+    assert!(!verify(&proof, assemble(150, &[8; 32], &[8; 32])));
+    assert!(!verify(&proof, assemble(150, &[9; 32], &[9; 32])));
+    assert!(!verify(&proof, assemble(151, &[9; 32], &[8; 32])));
     let mut other = inputs;
-    other[1] = halves(&[6; 32])[0];
-    assert!(!verify(&proof, &other));
+    other.tx.asset = [6; 32];
+    assert!(!verify(&proof, other));
     let mut other = inputs;
-    other[15] = halves(&[3; 32])[0];
-    assert!(!verify(&proof, &other));
+    other.tx.memos[0] = [3; 32];
+    assert!(!verify(&proof, other));
 }
 
-/// The memo halves are the SHA-256 of the memo bytes sent.
+/// The memos are bound by the SHA-256 of the memo bytes sent.
 #[test]
 fn memos_are_bound_by_their_sha256() {
     let data = args_data(0, 0, 0);
     let args = TransactInstructionData::try_from(&data[..]).unwrap();
-    let mut pool_bytes = pool_data();
-    let pool = Pool::load_mut(&mut pool_bytes).unwrap();
+    let pool_bytes = pool_data();
+    let pool = Pool::load(&pool_bytes).unwrap();
     let inputs = public_inputs(pool, &args, &[0; 32], &[0; 32]);
-    let digest: [u8; 32] = hash(b"zero").to_bytes();
-    assert_eq!([inputs[15], inputs[16]], halves(&digest));
-    assert_eq!(inputs[10], [0; 32]);
+    let digests = [b"zero".as_slice(), b"one"].map(|memo| hash(memo).to_bytes());
+    assert_eq!(inputs.tx.memos, digests);
 }
 
-/// The instruction data before the amounts, from the demo's public inputs: a zero
-/// proof (unused), `root`, the nullifiers, the commitments, `new_root`.
-fn proof_args(inputs: &[[u8; 32]]) -> Vec<u8> {
+/// The instruction data before the amounts, from the demo's public inputs (in proof
+/// order): a zero proof (unused), `root`, the nullifiers, the commitments,
+/// `new_root`.
+fn proof_args(inputs: &Fields) -> Vec<u8> {
     let mut ix = vec![0u8; 256];
     for i in [0, 3, 4, 5, 6, 8] {
         ix.extend_from_slice(&inputs[i]);

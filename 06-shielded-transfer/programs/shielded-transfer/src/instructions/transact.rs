@@ -6,7 +6,7 @@ use pinocchio::{
 };
 use pinocchio_system::create_account_with_minimum_balance_signed;
 use pinocchio_token::{instructions::Transfer, state::Account as TokenAccount};
-use shielded_transfer_transact_xark_verifier::{NUM_PUBLIC_INPUTS, Proof, verify};
+use shielded_transact_verifier::{Flow, Proof, PublicInputs, Transaction, verify};
 use solana_sha256_hasher::hash;
 
 use crate::{
@@ -337,71 +337,36 @@ fn proves(
 ) -> bool {
     verify(
         &Proof::from_le_bytes(data.proof),
-        &public_inputs(pool, data, recipient, relayer),
+        public_inputs(pool, data, recipient, relayer),
     )
 }
 
-/// The transact circuit's public `Transaction`, field by field, in its order
-/// (`xark inspect --json`).
+/// The transact circuit's public `Transaction`: what the instruction claims, checked
+/// against the pool's state (its mint, current root and next index) and the token
+/// accounts the value moves to. The memos are bound by their SHA-256.
 pub fn public_inputs(
     pool: &Pool,
     data: &TransactInstructionData,
     recipient: &[u8; 32],
     relayer: &[u8; 32],
-) -> [[u8; 32]; NUM_PUBLIC_INPUTS] {
-    let [asset_hi, asset_lo] = halves(&pool.mint);
-    let [recipient_hi, recipient_lo] = halves(recipient);
-    let [relayer_hi, relayer_lo] = halves(relayer);
-    let [memo0_hi, memo0_lo] = halves(&hash(data.memos[0]).to_bytes());
-    let [memo1_hi, memo1_lo] = halves(&hash(data.memos[1]).to_bytes());
-    [
-        *data.root,
-        asset_hi,
-        asset_lo,
-        *data.nf[0],
-        *data.nf[1],
-        *data.cm_out[0],
-        *data.cm_out[1],
-        *pool.current_root(),
-        *data.new_root,
-        field_from_u64(u64::from(u32::from_le_bytes(pool.next_index))),
-        flow(data.vpub_in, data.vpub_out, data.fee),
-        recipient_hi,
-        recipient_lo,
-        relayer_hi,
-        relayer_lo,
-        memo0_hi,
-        memo0_lo,
-        memo1_hi,
-        memo1_lo,
-    ]
-}
-
-/// A u64 as a 32-byte little-endian field element.
-fn field_from_u64(x: u64) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    out[..8].copy_from_slice(&x.to_le_bytes());
-    out
-}
-
-/// `Flow`'s three amounts as the circuit packs them, into one field element in
-/// declaration order: `vpub_in + vpub_out·2⁶⁴ + fee·2¹²⁸`, little-endian.
-fn flow(vpub_in: u64, vpub_out: u64, fee: u64) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    out[..8].copy_from_slice(&vpub_in.to_le_bytes());
-    out[8..16].copy_from_slice(&vpub_out.to_le_bytes());
-    out[16..24].copy_from_slice(&fee.to_le_bytes());
-    out
-}
-
-/// 32 bytes as the circuit takes an `Address` or a `Hash`: `[hi, lo]`, each 16-byte
-/// half read as a big-endian integer, as 32-byte little-endian field elements.
-pub fn halves(bytes: &[u8; 32]) -> [[u8; 32]; 2] {
-    let half = |b: &[u8]| {
-        let mut out = [0u8; 32];
-        out[..16].copy_from_slice(b);
-        out[..16].reverse();
-        out
-    };
-    [half(&bytes[..16]), half(&bytes[16..])]
+) -> PublicInputs {
+    PublicInputs {
+        tx: Transaction {
+            root: *data.root,
+            asset: pool.mint,
+            nullifiers: data.nf.map(|nf| *nf),
+            commitments: data.cm_out.map(|cm| *cm),
+            old_root: *pool.current_root(),
+            new_root: *data.new_root,
+            index: u32::from_le_bytes(pool.next_index),
+            flow: Flow {
+                vpub_in: data.vpub_in,
+                vpub_out: data.vpub_out,
+                fee: data.fee,
+                recipient: *recipient,
+                relayer: *relayer,
+            },
+            memos: data.memos.map(|memo| hash(memo).to_bytes()),
+        },
+    }
 }

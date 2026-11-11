@@ -1,6 +1,8 @@
 //! A deposit of 150 into an empty pool: proved as the verifier crate's self-test
-//! vector (`proof.bin`, `public_inputs.bin`, as `xark prove` writes them). `just
-//! build` runs it after `xark setup`.
+//! vector (`proof.bin`, `public_inputs.bin`, as `xark prove` writes them). Run it
+//! once the keys exist (`cargo run --release --example demo`), then `xark build`
+//! bundles the sample in `clients/shielded_transact/rust/`, and keeps it while it
+//! verifies.
 use pool::Path;
 use shielded_transact::{Flow, Key, Note, ShieldedTransactInputs, Spend, Transaction};
 use xark::Field;

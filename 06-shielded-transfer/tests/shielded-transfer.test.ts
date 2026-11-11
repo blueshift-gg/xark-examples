@@ -17,8 +17,9 @@ import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budge
 import { AccountState, TOKEN_PROGRAM_ADDRESS, getMintEncoder, getMintSize, getTokenDecoder, getTokenEncoder, getTokenSize } from "@solana-program/token";
 import type { LiteSVM } from "litesvm";
 import { createHash } from "node:crypto";
-import { artifacts, funded, instructionData, pooled, send, u64le, vm } from "./harness";
-import { Field, Key, Path, ShieldedTransact, Transaction, type Note, type PathValue, type ShieldedTransactProver, type Spend } from "./shielded_transact";
+import { circuit, funded, program as deployed, send, vm } from "@blueshift-gg/xark/testing";
+import { Field, Key, Path, ShieldedTransact, Transaction, type Note, type PathValue, type ShieldedTransactProver, type Spend } from "../clients/shielded_transact/ts/shielded_transact";
+import { instructionData, pooled, u64le } from "./helpers";
 
 const program = address("CUCcJJBRbK6tK4nPP2zgmvdYbKWSCGGVdRegtJ2GPJtF");
 const system = address("11111111111111111111111111111111");
@@ -39,7 +40,7 @@ let prover: ShieldedTransactProver;
 let threads: Awaited<ReturnType<typeof pooled>>;
 beforeAll(async () => {
   threads = await pooled();
-  prover = await ShieldedTransact.prover(artifacts("circuits/transact", "shielded_transact"), { wasm: threads.wasm, digest: ShieldedTransact.digest });
+  prover = await ShieldedTransact.prover(circuit("shielded_transact"), { wasm: threads.wasm, digest: ShieldedTransact.digest });
 });
 afterAll(() => threads.terminate());
 
@@ -52,7 +53,7 @@ interface Owned {
 
 /** A pool for a fresh mint, and what every wallet knows of its tree. */
 async function pool() {
-  const svm = vm(program, "program/target/deploy/shielded_transfer.so");
+  const svm = vm({ [program]: deployed("shielded-transfer") });
   const payer = await funded(svm);
   const mint = (await generateKeyPairSigner()).address;
   const mintData = getMintEncoder().encode({ mintAuthority: payer.address, supply: 1_000n, decimals: 0, isInitialized: true, freezeAuthority: null });

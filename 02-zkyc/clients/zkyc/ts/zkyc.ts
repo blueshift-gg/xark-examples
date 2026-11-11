@@ -450,7 +450,7 @@ const schema = {
     }
   },
   "version": 2,
-  "xark": "0.3.0"
+  "xark": "0.4.0"
 };
 
 /** A `Country` (an enum in the circuit): `Country.AD`, or its name, `"AD"`. */

@@ -3,8 +3,8 @@
 // commitment, its own policy on today's date, and the signer.
 import { AccountRole, generateKeyPairSigner, getAddressEncoder, type Address, type KeyPairSigner } from "@solana/kit";
 import type { LiteSVM } from "litesvm";
-import { artifacts, funded, send, vm } from "./harness";
-import { CheckFailed, Country, Field, Identity, Policy, Zkyc, type ZkycProver } from "./zkyc";
+import { circuit, funded, program as deployed, send, vm } from "@blueshift-gg/xark/testing";
+import { CheckFailed, Country, Field, Identity, Policy, Zkyc, type ZkycProver } from "../clients/zkyc/ts/zkyc";
 
 let program: Address;
 let prover: ZkycProver;
@@ -13,7 +13,7 @@ beforeAll(async () => {
   // From the build output, the prover also loads `client.wasm`: the circuit's Rust
   // functions, such as `Identity.commitment` and `Policy.default`.
   // Pinned to the circuit this client was generated from: a deployment can't swap it.
-  prover = await Zkyc.prover(artifacts("circuit", "zkyc"), { digest: Zkyc.digest });
+  prover = await Zkyc.prover(circuit("zkyc"), { digest: Zkyc.digest });
 });
 
 /** The holder's credential, from the issuer: the salt is the issuer's secret. */
@@ -28,7 +28,7 @@ const credential = (changes: Partial<Identity> = {}): Identity => ({
 });
 
 /**
- * The program's policy on `today` (its constants in `program/src/lib.rs`), built
+ * The program's policy on `today` (its constants in `programs/zkyc/src/policy.rs`), built
  * with the circuit's Rust: 18 or older, worth at least 500,000, a national of DE, FR,
  * GB or US, with a document valid that day.
  */
@@ -54,7 +54,7 @@ test("a compliant holder passes KYC onchain, under the program's policy and for 
   const id = credential();
   // The issuer publishes this; it's the circuit's own Rust, `Identity::commitment`.
   const commitment = Identity.commitment(id);
-  const svm = vm(program, "program/target/deploy/zkyc_program.so");
+  const svm = vm({ [program]: deployed("zkyc") });
   const payer = await funded(svm);
   const holder = await generateKeyPairSigner(); // the holder's wallet: it signs, payer pays
   setDay(svm, "2026-10-22");
@@ -83,7 +83,7 @@ test("the verifier picks the rules, not the prover", async () => {
   // own: a valid proof, of the wrong statement. The program supplies its policy.
   const id = credential({ netWorth: 100 });
   const commitment = Identity.commitment(id);
-  const svm = vm(program, "program/target/deploy/zkyc_program.so");
+  const svm = vm({ [program]: deployed("zkyc") });
   const payer = await funded(svm);
   const holder = await generateKeyPairSigner();
   setDay(svm, "2026-10-22");

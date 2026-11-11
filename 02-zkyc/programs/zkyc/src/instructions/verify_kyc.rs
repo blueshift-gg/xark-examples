@@ -3,7 +3,7 @@ use pinocchio::{
     error::ProgramError,
     sysvars::{Sysvar, clock::Clock},
 };
-use zkyc_xark_verifier::{Proof, verify};
+use zkyc_verifier::{Proof, verify};
 
 use crate::{ZkycError, policy::public_inputs};
 
@@ -67,12 +67,14 @@ impl<'a> VerifyKyc<'a> {
     pub fn process(&mut self) -> ProgramResult {
         // Today comes from the cluster, not the prover, so a proof can't be backdated.
         let unix = Clock::get()?.unix_timestamp;
+        // A day the circuit can't hold has no proof either.
         let public_inputs = public_inputs(
             self.data.commitment,
             unix,
             self.accounts.holder.address().as_array(),
-        );
-        if !verify(&Proof::from_le_bytes(self.data.proof), &public_inputs) {
+        )
+        .ok_or(ZkycError::InvalidProof)?;
+        if !verify(&Proof::from_le_bytes(self.data.proof), public_inputs) {
             return Err(ZkycError::InvalidProof.into());
         }
         Ok(())

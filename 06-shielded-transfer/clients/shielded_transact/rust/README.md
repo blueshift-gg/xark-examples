@@ -23,7 +23,7 @@ let Some(proof) = instruction_data.first_chunk::<256>() else {
 };
 let proof = shielded_transact_verifier::Proof::from_le_bytes(proof);
 let inputs = shielded_transact_verifier::PublicInputs { /* from your program's state */ };
-if !shielded_transact_verifier::verify(&proof, &inputs) {
+if !shielded_transact_verifier::verify(&proof, inputs) {
     return Err(ProgramError::InvalidArgument);
 }
 ```

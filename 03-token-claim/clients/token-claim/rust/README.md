@@ -23,7 +23,7 @@ let Some(proof) = instruction_data.first_chunk::<256>() else {
 };
 let proof = token_claim_verifier::Proof::from_le_bytes(proof);
 let inputs = token_claim_verifier::PublicInputs { /* from your program's state */ };
-if !token_claim_verifier::verify(&proof, &inputs) {
+if !token_claim_verifier::verify(&proof, inputs) {
     return Err(ProgramError::InvalidArgument);
 }
 ```

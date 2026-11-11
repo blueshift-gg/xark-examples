@@ -23,7 +23,7 @@ let Some(proof) = instruction_data.first_chunk::<256>() else {
 };
 let proof = vote_verifier::Proof::from_le_bytes(proof);
 let inputs = vote_verifier::PublicInputs { /* from your program's state */ };
-if !vote_verifier::verify(&proof, &inputs) {
+if !vote_verifier::verify(&proof, inputs) {
     return Err(ProgramError::InvalidArgument);
 }
 ```

@@ -46,7 +46,8 @@ xark test       # the circuits' tests, the program's and verifier crates' Rust t
 run time.
 
 The keys and the generated clients are committed: the verifier crate embeds the verifying key, and
-a key only in `target/` would be replaced on every fresh clone. `xark build --check` (CI) fails when
+a key only in `target/` would be replaced on every fresh clone. Each key keeps the `circuit.xbc` it
+was made from beside it, since a key proves only with that build. `xark build --check` (CI) fails when
 they aren't what the source builds. The verifier crates bundle a sample proof as their self-test:
 the circuits' `examples/demo.rs` write one (built from the circuit's own Rust: a commitment, a
 Merkle root), and a rebuild keeps it while it still verifies.

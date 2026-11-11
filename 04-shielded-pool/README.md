@@ -33,9 +33,9 @@ A shielded pool is a Merkle tree, and the classic trap is that the Poseidon in y
 Poseidon onchain must be **byte-for-byte identical** or the roots never match. Instead of
 reimplementing the hash in a Solana program, all hashing stays in the circuits:
 
-- **`deposit`** proves *"`new_root` is the tree rooted at `old_root` with `leaf` appended at
+- **`deposit`** ([`shielded-pool-deposit`](./circuits/shielded-pool-deposit/src/lib.rs)) proves *"`new_root` is the tree rooted at `old_root` with `leaf` appended at
   `index`"*. Public inputs: `old_root, new_root, leaf, index`.
-- **`withdraw`** proves membership and derives the nullifier hash. Public inputs:
+- **`withdraw`** ([`shielded-pool-withdraw`](./circuits/shielded-pool-withdraw/src/lib.rs)) proves membership and derives the nullifier hash. Public inputs:
   `root, nullifier_hash, recipient, relayer, fee`.
 
 The program stores only a ring of recent roots, the next index, and one marker account per spent
@@ -112,28 +112,37 @@ it has identical value; arbitrary hidden amounts need value-carrying notes, whic
 ## Anatomy
 
 ```
-circuits/pool/       Path (the tree, for circuits and wallets), bind: shared with 06
-circuits/deposit/    proves a tree append                (public: Append)
-circuits/withdraw/   proves membership + nullifier, and  (public: Withdrawal)
-                     Note's commitment and nullifier hash
-client/              both generated clients, and the wallet test
-program/             Pinocchio: verify both proofs, hold and pay lamports, track roots and nullifiers
+circuits/pool/                    Path (the tree, for circuits and wallets), bind: shared with 06
+circuits/shielded-pool-deposit/   proves a tree append                (public: Append)
+circuits/shielded-pool-withdraw/  proves membership + nullifier, and  (public: Withdrawal)
+                                  Note's commitment and nullifier hash
+clients/<circuit>/rust/           each circuit's verifier crate, with typed PublicInputs (generated)
+clients/<circuit>/ts/             each circuit's TypeScript client (generated)
+keys/<circuit>/                   each circuit's proving and verifying keys
+programs/shielded-pool/           Pinocchio: verify both proofs, hold and pay lamports, track roots and nullifiers
+tests/                            the wallet test (LiteSVM)
 ```
+
+`circuits/pool` has no `#[circuit]`, so xark builds it only into the two circuits that use it.
 
 ## Run it
 
 ```bash
-npm run build          # both circuits → keys → verifier crates → clients → .so
-npm run test:circuit   # the tree's tests, each circuit's, then the program's
-npm test               # deposit, withdraw through a relayer, onchain (LiteSVM)
+xark build                          # both circuits, their keys and clients (Rust, TypeScript), then the .so
+xark test                           # each circuit's tests, the program's, then deposit and withdraw onchain (LiteSVM)
+cargo test --release -p pool        # the tree's tests
 ```
 
-The [test](./client/shielded-pool.test.ts) is the reference wallet and client: two deposits, a path
+`npm run check` is CI's `xark build --check`: the committed keys and clients are what the source
+builds. Each circuit's `examples/demo.rs` proves the sample its verifier crate bundles and tests
+(`cargo run --release -p shielded-pool-deposit --example demo`, then `xark build`).
+
+The [test](./tests/shielded-pool.test.ts) is the reference wallet and client: two deposits, a path
 kept current across the second, a withdrawal relayed to a fresh address for a fee, and the refusals
 (another recipient, another fee, an unknown root, the same note twice). It also checks the
 program's empty root against `Path.first().treeRoot()`.
 
-The program's own [tests](./program/src/tests.rs) run on the host, against accounts laid out as the
+The program's own [tests](./programs/shielded-pool/src/tests.rs) run on the host, against accounts laid out as the
 runtime lays them out: each account check below refuses what it should, and the demo proofs verify
 against the public inputs the program assembles, and not for another recipient, relayer or fee.
 
@@ -156,7 +165,7 @@ first. A high-throughput deployment needs a sequencer/batcher or a different app
 The program is [Pinocchio](https://github.com/anza-xyz/pinocchio), `no_std`:
 
 ```
-program/src/
+programs/shielded-pool/src/
   lib.rs              the entrypoint, which dispatches on the first byte
   instructions/       initialize.rs, deposit.rs, withdraw.rs: one file per instruction
   state.rs            the pool's layout and checks, the nullifier marker, the seeds
@@ -166,7 +175,25 @@ program/src/
 ```
 
 Each instruction is an accounts struct and an instruction-data struct, each parsed with
-`TryFrom`, and a `process` that verifies the proof and then moves state and lamports. Instruction
+`TryFrom`, and a `process` that verifies the proof and then moves state and lamports. The proof is
+checked against the generated crate's `PublicInputs`, filled from the pool's state and the
+transaction's accounts:
+
+```rust
+use shielded_pool_withdraw_verifier::{Proof, PublicInputs, Withdrawal, verify};
+
+let inputs = PublicInputs {
+    withdrawal: Withdrawal {
+        root: *self.data.root,
+        nullifier_hash: *self.data.nullifier_hash,
+        recipient: self.accounts.recipient.address().to_bytes(), // split into hi/lo for you
+        relayer: self.accounts.relayer.address().to_bytes(),
+        fee,
+    },
+};
+if !verify(&Proof::from_le_bytes(self.data.proof), inputs) { … }
+```
+ Instruction
 data is a one-byte discriminator, then the arguments' bytes in order; integers are little-endian,
 and data of any other length is refused. The program's address is `ID` in `lib.rs`,
 `Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS`, which the client test deploys it at; the
@@ -228,7 +255,7 @@ The pool's layout, every field little-endian:
 
 A nullifier's account is one byte, its tag, `2`; that it exists is what counts. An address enters
 the circuit as a `Hash`, `[hi, lo]`: each 16-byte half read as a big-endian integer, as a
-little-endian field element.
+little-endian field element. The generated `PublicInputs` does that split.
 
 ### Errors
 

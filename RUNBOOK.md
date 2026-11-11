@@ -8,15 +8,15 @@ The reproducible build and deployment path. If a command here disagrees with an 
 | Tool | Version | Install |
 |------|---------|---------|
 | Rust | stable, `1.95.0` pinned | installed from `rust-toolchain.toml` (xark needs 1.89+) |
-| xark CLI | `0.3` | `cargo install xark-cli --version 0.3.1 --locked` |
-| xark crates, `@blueshift-gg/xark` | `0.3` | from crates.io and npm, through the manifests |
+| xark CLI | `0.4` | `cargo install xark-cli --version 0.4.0 --locked` |
+| xark crates, `@blueshift-gg/xark` | `0.4` | from crates.io and npm, through the manifests |
 | `cargo-build-sbf` | `4.2.0` | `cargo install cargo-build-sbf --version 4.2.0 --locked` |
 | Node | 22+ | [nodejs.org](https://nodejs.org) |
 
-No nightly Rust: xark 0.3 compiles circuits with your stable toolchain.
+No nightly Rust: xark 0.4 compiles circuits with your stable toolchain.
 
 ```bash
-cargo install xark-cli --version 0.3.1 --locked
+cargo install xark-cli --version 0.4.0 --locked
 npm ci            # one install for every example: the root is an npm workspace
 xark doctor
 ```
@@ -30,36 +30,33 @@ solana config set --url devnet
 solana airdrop 2
 ```
 
-## 2. One example's pipeline
+## 2. One example
 
-Each example's `npm run build` runs the same steps:
+Each example is an xark project (`xark init` makes one): a `xark.toml`, one Cargo workspace, its
+circuits in `circuits/`, its program in `programs/`, the clients xark generates in `clients/`, its
+keys in `keys/`, and its LiteSVM tests in `tests/`. In its directory:
 
 ```bash
-xark build <circuit>                        # Rust → wasm → R1CS: target/xark/<name>/
-xark setup <circuit> --r1cs-form reduced   # a single-party key (see §5)
-<prove the demo inputs>                     # the verifier crate's self-test vector
-xark export <circuit> --crate-name <name>   # the verifier crate, beside the circuit's sources
-xark client <circuit> --out client/         # the typed TypeScript client
-cd program && cargo build-sbf --arch v3     # the program, linking the verifier crate
+xark build      # every circuit, its keys if missing, its clients (clients/<circuit>/{rust,ts}), then the program
+xark test       # the circuits' tests, the program's and verifier crates' Rust tests, then the LiteSVM tests
 ```
 
-`cargo build-sbf` only warns when a function's stack frame passes SBF's 4 KiB ("Function … overflows
-the maximum allowed frame space"), and at run time that frame silently corrupts the stack, so
-`build:program` fails on that warning. It touches `src/lib.rs` first, so the program links again and
-the warning, which cargo doesn't replay from its cache, is seen on every build.
+`xark build` fails when a stack frame passes SBF's 4 KiB, which `cargo build-sbf` only warns about
+("Function … overflows the maximum allowed frame space") and which silently corrupts the stack at
+run time.
 
-`xark export` bundles a real proof as its crate's self-test, so something must prove first: 01
-runs `xark prove --inputs '{"power_level": 9001}'`; the others run their circuit crate's
-`examples/demo.rs`, which builds the inputs with the circuit's own Rust (a commitment, a Merkle
-root) and proves them with `xark::prover`.
+The keys and the generated clients are committed: the verifier crate embeds the verifying key, and
+a key only in `target/` would be replaced on every fresh clone. `xark build --check` (CI) fails when
+they aren't what the source builds. The verifier crates bundle a sample proof as their self-test:
+the circuits' `examples/demo.rs` write one (built from the circuit's own Rust: a commitment, a
+Merkle root), and a rebuild keeps it while it still verifies.
 
-Programs build for SBPF v3. The generated verifier crate takes `xark-verifier` with its default
-`static-syscalls` feature, which only a v3 program loads: a v0 build fails with "Relative jump out of
-bounds". (With that feature off, `xark-verifier` picks the syscall ABI from the target, and v0 and
-v3 builds both verify, at the same compute.)
+The verifier crate's syscall ABI follows the target, so a program builds for `cargo build-sbf`'s
+default (SBPF v0) or for v3 (`--arch v3`), and verifies at the same compute either way.
 
-`xark inspect <circuit> --json` lists the public inputs leaf by leaf, in proof order: the order a
-program assembles them in. `xark profile <circuit> --html` attributes every constraint to its source line.
+A program builds its public inputs as the generated crate's `PublicInputs`, by name, and `verify`
+packs them as the circuit does. `xark inspect <circuit> --json` lists them leaf by leaf, in proof
+order, and `xark profile <circuit> --html` attributes every constraint to its source line.
 
 ## 3. Full repository verification
 
@@ -67,47 +64,46 @@ From the repository root:
 
 ```bash
 npm ci
-npm run build           # every example: circuits, keys, verifier crates, clients, programs
-npm run check:clients   # the committed clients are the ones the build generated
-npm run test:circuit    # every circuit's own Rust tests, then the programs' host tests
-npm test                # tsc + every client test, per example
-npm run fmt:check       # after the build: the programs' manifests name the verifier crates
+npm run build           # every example's xark build
+npm run check           # every example's xark build --check: committed keys and clients are current
+npm test                # every example's xark test
+npm run fmt:check
 npm run clippy
 ```
 
 Each runs the script of the same name in every example, in order; `cd <example>` and the same
-command runs just that one. CI ([`ci.yml`](./.github/workflows/ci.yml)) runs these steps in each
-example's directory, one job per example.
+command runs just that one. CI ([`ci.yml`](./.github/workflows/ci.yml)) runs `xark build --check`,
+`xark test`, `cargo fmt` and `cargo clippy` in each example's directory, one job per example.
 
-`npm test` is the end-to-end test: each example's client proves in node through `@blueshift-gg/xark`, and
-the proof goes in a transaction to the example's program in LiteSVM (in-process, with the real
-`alt_bn128` syscalls; no validator or network).
+The LiteSVM tests are the end-to-end tests: each example's client proves in node through
+`@blueshift-gg/xark`, and the proof goes in a transaction to the example's program in LiteSVM
+(in-process, with the real `alt_bn128` syscalls; no validator or network).
 
 ## 4. Deploying a program
 
 Every program is Pinocchio: one `.so`, with no framework and no IDL. After the example's
-`npm run build`, which generates the verifier crates the program links:
+`xark build`:
 
 ```bash
-cd <example>/program
-cargo build-sbf --arch v3                   # target/deploy/<name>.so and <name>-keypair.json
+cd <example>
+cargo build-sbf                             # target/deploy/<name>.so and <name>-keypair.json
 solana program deploy target/deploy/<name>.so
 ```
 
 The first deploy takes its program address from `target/deploy/<name>-keypair.json`, which
 `cargo build-sbf` makes if it's missing; keep that keypair (it's ignored by git) to upgrade the same
 program later. The programs that own accounts (03 to 06) name their own address, `ID` in
-`program/src/lib.rs`, as Pinocchio programs do, and derive their PDAs and check owners against it: to
-deploy one elsewhere, put that keypair's address in `ID` and in the client, and build again. 01 and
-02 own no accounts and run at any address. The client tests load each program at its `ID` in
-LiteSVM (01 and 02 at an address of their own).
+`programs/<name>/src/lib.rs`, as Pinocchio programs do, and derive their PDAs and check owners
+against it: to deploy one elsewhere, put that keypair's address in `ID` and in the client, and build
+again. 01 and 02 own no accounts and run at any address. The LiteSVM tests load each program at its
+`ID` (01 and 02 at an address of their own).
 
-The client tests are the reference clients: each instruction's tag and data layout, account metas,
+The LiteSVM tests are the reference clients: each instruction's tag and data layout, account metas,
 PDA seeds, public-input encoding, and the wallet's bookkeeping of notes and paths.
 
 ## 5. Trusted setup
 
-The recipes make single-party keys from the machine's randomness, and never commit them. Such a key
+The examples' keys are single-party keys from the machine's randomness, committed in `keys/`. Such a key
 is sound unless whoever ran setup kept that randomness, but users of the verifier have to trust that
 one party; the verifier crate's `SETUP` says `single-party`. A deployment that holds value needs a
 reviewed circuit and an auditable multi-party phase-2 ceremony (`SETUP` is then `ceremony`): [docs/ceremony.md](./docs/ceremony.md) walks one through on 01's circuit. Preserve the transcript, and pin the
@@ -116,9 +112,10 @@ client to the circuit and key it was made for: `Circuit.prover(url, { digest })`
 
 ## 6. Integration contracts to preserve
 
-1. **Public-input order.** Each shielded circuit's public statement struct (`Append`, `Withdrawal`,
-   `Transaction`) is the order; the program's `public_inputs` must match it. `xark inspect --json`
-   lists it leaf by leaf.
+1. **Public inputs.** Each circuit's public statement (`Append`, `Withdrawal`, `Transaction`, …) is
+   what the program fills in, as the generated crate's `PublicInputs`; the crate packs it in the
+   circuit's order: a reordered field needs nothing from the program, and a renamed or removed
+   one is a compile error there, not a proof that fails.
 2. **One tree definition.** Every circuit root is `xark-merkle`'s `merkle_root`; the wallet's
    `Path` (through the client) is tested against a tree hashed from scratch, and the client tests
    check each program's empty root against `Path.first().treeRoot()`.

@@ -11,11 +11,10 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
-    "test:circuit": "npm run test:circuit --workspaces",
-    "test": "npm test --workspaces",
+    "check": "npm run check --workspaces",
+    "test": "npm run test:all --workspaces",
     "fmt:check": "npm run fmt:check --workspaces",
     "clippy": "npm run clippy --workspaces",
-    "check:clients": "npm run check:clients --workspaces",
     "clean": "npm run clean --workspaces"
   }
 }

@@ -1,11 +1,12 @@
 //! Onchain verifier for the "over 9000" circuit. It has one instruction and takes no
 //! accounts: the instruction data is the 256-byte proof, as the circuit has no public
-//! inputs. `verify` comes from the crate `xark export` generated and checks the proof
-//! with the alt_bn128 syscalls; its public inputs are a `[[u8; 32]; N]`, so their
-//! number is checked when the program compiles.
+//! inputs. `verify` comes from the crate `xark build` generates
+//! (`clients/over-9000/rust`) and checks the proof with the alt_bn128 syscalls; its
+//! public inputs are the circuit's, none here, so their number is checked when the
+//! program compiles.
 #![cfg_attr(not(test), no_std)]
 
-use over_9000_xark_verifier::{Proof, verify};
+use over_9000_verifier::{Proof, verify};
 use pinocchio::{
     AccountView, Address, ProgramResult,
     error::{ProgramError, ToStr},
@@ -78,7 +79,7 @@ impl Verify<'_> {
     // time and corrupts the stack at run time.
     #[inline(never)]
     pub fn process(&self) -> ProgramResult {
-        if !verify(&Proof::from_le_bytes(self.data.proof), &[]) {
+        if !verify(&Proof::from_le_bytes(self.data.proof), []) {
             return Err(Over9000Error::InvalidProof.into());
         }
         Ok(())

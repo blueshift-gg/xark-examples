@@ -35,9 +35,9 @@ editor.
 
 ## The app
 
-`xark client` generates [`client/over_9000.ts`](./client/over_9000.ts) from the circuit: its inputs
-as TypeScript types (`powerLevel: U64`). Proving and sending is the whole app
-([`client/over-9000.test.ts`](./client/over-9000.test.ts)):
+`xark build` generates [`clients/over-9000/ts/over_9000.ts`](./clients/over-9000/ts/over_9000.ts)
+from the circuit: its inputs as TypeScript types (`powerLevel: U64`). Proving and sending is the
+whole app ([`tests/over-9000.test.ts`](./tests/over-9000.test.ts)):
 
 ```ts
 const prover = await Over9000.prover("/circuits/over_9000/");
@@ -45,9 +45,10 @@ const proof = prover.prove({ powerLevel: 9001 });
 // instruction data: proof.toBytes(), 256 bytes
 ```
 
-The [program](./program/src/lib.rs) has one instruction, `Verify`, and no accounts: its instruction
-data is the proof, parsed to exactly 256 bytes (else the built-in `InvalidInstructionData`), then
-one call to the verifier crate `xark export` generated (a proof that fails is the program's own
+The [program](./programs/over-9000/src/lib.rs) has one instruction, `Verify`, and no accounts: its
+instruction data is the proof, parsed to exactly 256 bytes (else the built-in
+`InvalidInstructionData`), then one call to the verifier crate `xark build` generated
+([`clients/over-9000/rust`](./clients/over-9000/rust/src/lib.rs)) (a proof that fails is the program's own
 `Over9000Error::InvalidProof`, code 0, whose name it logs). Verifying costs about 76,000 compute units. Try
 `prover.prove({ powerLevel: 9000 })`: there's no proof to make, and the client throws a
 `CheckFailed` naming the line: ``the inputs fail the check at src/lib.rs:9:5: `require(power_level > 9000u64);` ``.
@@ -62,197 +63,75 @@ published commitment ([02](../02-zkyc/)) or a Merkle tree of deposits
 ## Run it
 
 ```bash
-npm run build          # circuit → key → verifier crate → client → .so
-npm run test:circuit   # the circuit's Rust tests: 9001 passes, 9000 doesn't
-npm test               # prove with the client, verify onchain (LiteSVM)
+xark build     # circuit, its clients (Rust verifier crate, TypeScript), then the program
+xark test      # the circuit's Rust tests (9001 passes, 9000 doesn't), then prove and verify onchain
 ```
 
-Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks the Rust and xark side).
+`npm run check` is CI's `xark build --check`: the committed keys and clients are what the source
+builds. Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks them).
 
 ## Build it yourself, from `xark init`
 
-The same example from nothing, in four steps. Every command below was run as written.
+The same example from nothing. Every command below was run as written.
 
-**1. The circuit.** `xark init` scaffolds a circuit crate, wired for rust-analyzer. Replace its
-`src/lib.rs` with [the circuit above](./circuit/src/lib.rs) (tests included), then:
-
-```bash
-xark init over-9000
-xark test over-9000                                    # builds the circuit, runs its tests
-xark prove over-9000 --inputs '{"power_level": 9001}'  # makes the key on the first run
-```
-
-**2. The verifier and the client.** The verifier crate embeds the verifying key. The key from step 1
-is a single-party setup from your machine's randomness, and the crate's `SETUP` constant says so;
-for a key no single party has to be trusted for, run a [ceremony](../docs/ceremony.md).
+**1. The circuit.** `xark init` makes a project with a starter circuit in `circuits/over-9000/`.
+Replace its `src/lib.rs` with [the circuit above](./circuits/over-9000/src/lib.rs) (tests included):
 
 ```bash
-xark export over-9000                           # over-9000/over-9000-verifier/
-xark client over-9000 --out app/                # app/over_9000.ts
+xark init over-9000 && cd over-9000
+xark test                                     # builds the circuit, runs its tests
 ```
 
-**3. The program.** `cargo new --lib program`, then add to its `Cargo.toml`:
+**2. The program.** `xark add program` makes the circuit's key and clients, then a Pinocchio program
+that verifies its proofs, and a LiteSVM test. The key is a single-party setup from your machine's
+randomness, and the verifier crate's `SETUP` constant says so; for a key no single party has to be
+trusted for, run a [ceremony](../docs/ceremony.md).
 
-```toml
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-over-9000-verifier = { path = "../over-9000/over-9000-verifier" }
-pinocchio = "0.11"
+```bash
+xark add program over-9000    # programs/over-9000/, clients/over-9000/{rust,ts}/, keys/over-9000/
 ```
 
-and `src/lib.rs`, the [program](./program/src/lib.rs) without its doc comments:
+Replace `programs/over-9000/src/` with [this one's](./programs/over-9000/src/lib.rs): one file, one
+instruction that takes only the proof, since the circuit has no public inputs. Its verify call:
 
 ```rust
-#![no_std]
 use over_9000_verifier::{Proof, verify};
-use pinocchio::{
-    AccountView, Address, ProgramResult,
-    error::{ProgramError, ToStr},
-    program_entrypoint,
-};
 
-program_entrypoint!(process_instruction);
-pinocchio::nostd_panic_handler!();
-pinocchio::no_allocator!();
-
-fn process_instruction(_: &Address, _: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    let result = Verify::try_from(data).and_then(|verify| verify.process());
-    if let Err(error @ ProgramError::Custom(_)) = &result {
-        log(error.to_str::<Over9000Error>());
-    }
-    result
-}
-
-fn log(message: &str) {
-    #[cfg(target_os = "solana")]
-    unsafe { pinocchio::syscalls::sol_log_(message.as_ptr(), message.len() as u64) };
-}
-
-pub struct VerifyInstructionData<'a> {
-    pub proof: &'a [u8; 256],
-}
-
-impl<'a> TryFrom<&'a [u8]> for VerifyInstructionData<'a> {
-    type Error = ProgramError;
-
-    fn try_from(data: &'a [u8]) -> Result<Self, Self::Error> {
-        let proof = data.try_into().map_err(|_| ProgramError::InvalidInstructionData)?;
-        Ok(Self { proof })
-    }
-}
-
-pub struct Verify<'a> {
-    pub data: VerifyInstructionData<'a>,
-}
-
-impl<'a> TryFrom<&'a [u8]> for Verify<'a> {
-    type Error = ProgramError;
-
-    fn try_from(data: &'a [u8]) -> Result<Self, Self::Error> {
-        Ok(Self { data: VerifyInstructionData::try_from(data)? })
-    }
-}
-
-impl Verify<'_> {
-    // Out of line, or the pairing check's buffers take the entrypoint's frame past 4 KiB.
-    #[inline(never)]
-    pub fn process(&self) -> ProgramResult {
-        if !verify(&Proof::from_le_bytes(self.data.proof), &[]) {
-            return Err(Over9000Error::InvalidProof.into());
-        }
-        Ok(())
-    }
-}
-
-#[repr(u32)]
-pub enum Over9000Error {
-    InvalidProof = 0,
-}
-
-impl From<Over9000Error> for ProgramError {
-    fn from(e: Over9000Error) -> Self {
-        ProgramError::Custom(e as u32)
-    }
-}
-
-impl TryFrom<u32> for Over9000Error {
-    type Error = ProgramError;
-
-    fn try_from(code: u32) -> Result<Self, Self::Error> {
-        match code {
-            0 => Ok(Self::InvalidProof),
-            _ => Err(ProgramError::InvalidArgument),
-        }
-    }
-}
-
-impl ToStr for Over9000Error {
-    fn to_str(&self) -> &'static str {
-        match self {
-            Self::InvalidProof => "InvalidProof: invalid proof",
-        }
-    }
+if !verify(&Proof::from_le_bytes(self.data.proof), []) {
+    return Err(Over9000Error::InvalidProof.into());
 }
 ```
 
-```bash
-cd program && cargo build-sbf --arch v3         # program/target/deploy/over_9000_program.so
-```
-
-**4. The app.** In `app/`: `npm init -y`, `npm pkg set type=module`, `npm install
-@blueshift-gg/xark @solana/kit litesvm tsx`, and `prove.ts`:
+**3. The app.** Replace `tests/over-9000.test.ts` with [this one](./tests/over-9000.test.ts): prove
+with the generated client, send the proof to the program in LiteSVM.
 
 ```ts
-import { readFileSync } from "node:fs";
-import {
-  appendTransactionMessageInstruction, createTransactionMessage, generateKeyPairSigner, lamports, pipe,
-  setTransactionMessageFeePayerSigner, setTransactionMessageLifetimeUsingBlockhash, signTransactionMessageWithSigners,
-} from "@solana/kit";
-import { FailedTransactionMetadata, LiteSVM } from "litesvm";
-import { Over9000 } from "./over_9000";
+import { circuit, funded, program as deployed, send, vm } from "@blueshift-gg/xark/testing";
+import { Over9000 } from "../clients/over-9000/ts/over_9000";
 
-// 1. Prove, with the circuit's build output (an app would fetch it from a URL).
-const out = "../over-9000/target/xark/over-9000/";
-const read = (f: string) => new Uint8Array(readFileSync(out + f));
-const prover = await Over9000.prover(
-  { circuit: read("circuit.xbc"), provingKey: read("pk.bin"), sources: readFileSync(out + "sources.json", "utf8") },
-  { digest: Over9000.digest },
-);
+const prover = await Over9000.prover(circuit("over-9000"), { digest: Over9000.digest });
 const proof = prover.prove({ powerLevel: 9001 });
-
-// 2. Send it to the program, here in LiteSVM (an app would send to an RPC).
-const svm = new LiteSVM();
-const program = (await generateKeyPairSigner()).address;
-svm.addProgramFromFile(program, "../program/target/deploy/over_9000_program.so");
-const payer = await generateKeyPairSigner();
-svm.airdrop(payer.address, lamports(1_000_000_000n));
-const tx = await pipe(
-  createTransactionMessage({ version: 0 }),
-  (m) => setTransactionMessageFeePayerSigner(payer, m),
-  (m) => setTransactionMessageLifetimeUsingBlockhash({ blockhash: svm.latestBlockhash(), lastValidBlockHeight: 0n }, m),
-  (m) => appendTransactionMessageInstruction({ programAddress: program, data: proof.toBytes() }, m),
-  (m) => signTransactionMessageWithSigners(m),
-);
-const result = svm.sendTransaction(tx);
-console.log(result instanceof FailedTransactionMetadata ? `failed: ${result.err()}` : `verified onchain in ${result.computeUnitsConsumed()} CU`);
+const svm = vm({ [program]: deployed("over-9000") });
+await send(svm, await funded(svm), { programAddress: program, data: proof.toBytes() });
 ```
 
 ```bash
-npx tsx prove.ts    # verified onchain in 75949 CU
+xark build                    # the circuit, its clients, then the program (cargo build-sbf)
+npm install && xark test
 ```
 
-That's the whole loop: change the circuit, rerun steps 1–2 and rebuild, and the client and the
-verifier follow it. This directory's `npm run build` runs the same steps, with its key from `xark setup`.
+That's the whole loop: change the circuit, run `xark build`, and the client and the verifier follow
+it. Commit `keys/` and `clients/` with it: the verifier embeds the key.
 
 ## Layout
 
 ```
-circuit/       the circuit crate: src/lib.rs, plain Rust, with its tests
-client/        the generated TypeScript client, and its test: prove, then verify onchain
-program/       Pinocchio verifier: src/lib.rs, one instruction, one verify call
-package.json   build · test:circuit · test
+circuits/over-9000/   the circuit crate: src/lib.rs, plain Rust, with its tests
+programs/over-9000/   Pinocchio verifier: src/lib.rs, one instruction, one verify call
+clients/over-9000/    generated by `xark build`: the Rust verifier crate and the TypeScript client
+keys/over-9000/       the proving and verifying keys (committed: the verifier embeds the key)
+tests/                prove with the client, then verify onchain (LiteSVM)
+xark.toml             the xark release the project is made with
 ```
 
 Next → [02 · zKYC](../02-zkyc/): range proofs put to work

@@ -3,7 +3,7 @@
 //   #[circuit]
 //   fn over_9000(power_level: Private<u64>)
 //
-// `xark build` records the circuit's parameter types in target/xark/over_9000/schema.json
+// `xark build` records the circuit's parameter types in target/xark/over-9000/schema.json
 // and `xark client` turns them into the types below. Don't edit this file: change
 // the circuit, then rebuild and rerun `xark client`. Values go in their natural
 // forms (dates, strings, variant names, bytes); `@blueshift-gg/xark` encodes them against the
@@ -28,7 +28,7 @@ const schema = {
   "public_inputs": [],
   "types": {},
   "version": 2,
-  "xark": "0.3.0"
+  "xark": "0.4.0"
 };
 
 /** Every input of `over_9000`. */
@@ -46,7 +46,7 @@ export interface Over9000PublicValues {
 
 /**
  * `over_9000`: make a prover or verifier from a URL serving a copy of
- * `target/xark/over_9000/` (relative to the page in a browser) or from the bytes:
+ * `target/xark/over-9000/` (relative to the page in a browser) or from the bytes:
  *
  * ```ts
  * const prover = await Over9000.prover("/circuits/over_9000/");

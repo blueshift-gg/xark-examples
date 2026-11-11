@@ -4,7 +4,7 @@ use pinocchio::{
     error::ProgramError,
 };
 use pinocchio_token::instructions::Transfer;
-use token_claim_xark_verifier::{Proof, verify};
+use token_claim_verifier::{Proof, PublicInputs, verify};
 
 use crate::{
     TokenClaimError,
@@ -116,9 +116,17 @@ impl<'a> Claim<'a> {
             (distributor.root, distributor.bump)
         };
 
-        let public_inputs =
-            public_inputs(&root, accounts.claimant.address().as_array(), data.amount);
-        if !verify(&Proof::from_le_bytes(data.proof), &public_inputs) {
+        // The circuit's public inputs, each from where the program trusts it: the
+        // root from the distributor, the claimant from the signer, the amount from
+        // the instruction.
+        let inputs = PublicInputs {
+            root,
+            claim: token_claim_verifier::Claim {
+                claimant: *accounts.claimant.address().as_array(),
+                amount: data.amount,
+            },
+        };
+        if !verify(&Proof::from_le_bytes(data.proof), inputs) {
             return Err(TokenClaimError::InvalidProof.into());
         }
 
@@ -167,31 +175,4 @@ impl<'a> Claim<'a> {
         )
         .invoke_signed(&[Signer::from(&seeds)])
     }
-}
-
-/// The circuit's public inputs, in its order (`xark inspect --json`): `root`, then
-/// `claim`, its `claimant` as `[hi, lo]` and its `amount`. Each a 32-byte
-/// little-endian field element.
-pub fn public_inputs(root: &[u8; 32], claimant: &[u8; 32], amount: u64) -> [[u8; 32]; 4] {
-    let [hi, lo] = halves(claimant);
-    [*root, hi, lo, field(amount)]
-}
-
-/// A `u64` as a 32-byte little-endian field element.
-fn field(x: u64) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    out[..8].copy_from_slice(&x.to_le_bytes());
-    out
-}
-
-/// An address as the circuit's `Hash`: `[hi, lo]`, each 16-byte half read as a
-/// big-endian integer, as 32-byte little-endian field elements.
-fn halves(bytes: &[u8; 32]) -> [[u8; 32]; 2] {
-    let half = |b: &[u8]| {
-        let mut out = [0u8; 32];
-        out[..16].copy_from_slice(b);
-        out[..16].reverse();
-        out
-    };
-    [half(&bytes[..16]), half(&bytes[16..])]
 }

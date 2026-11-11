@@ -14,8 +14,9 @@ import {
 } from "@solana/kit";
 import { AccountState, TOKEN_PROGRAM_ADDRESS, getMintEncoder, getMintSize, getTokenDecoder, getTokenEncoder, getTokenSize } from "@solana-program/token";
 import type { LiteSVM } from "litesvm";
-import { artifacts, funded, send, u64le, vm } from "./harness";
-import { Claim, Path, TokenClaim, type Field, type PathValue, type TokenClaimProver } from "./token_claim";
+import { circuit, funded, program as deployed, send, vm } from "@blueshift-gg/xark/testing";
+import { Claim, Path, TokenClaim, type Field, type PathValue, type TokenClaimProver } from "../clients/token-claim/ts/token_claim";
+import { u64le } from "./helpers";
 
 const system = address("11111111111111111111111111111111");
 const bytes = (a: Address) => new Uint8Array(getAddressEncoder().encode(a));
@@ -27,7 +28,7 @@ const program = address("ETPfSrNBJ6Z29DQ7HzcqHtLcZLWCvS5Ar8VdnoByLZpX"); // the 
 let prover: TokenClaimProver;
 beforeAll(async () => {
   // Pinned to the circuit this client was generated from: a deployment can't swap it.
-  prover = await TokenClaim.prover(artifacts("circuit", "token_claim"), { digest: TokenClaim.digest });
+  prover = await TokenClaim.prover(circuit("token-claim"), { digest: TokenClaim.digest });
 });
 
 /**
@@ -62,7 +63,7 @@ const balance = (svm: LiteSVM, at: Address) => {
 
 /** A VM with the program and a fresh mint, its supply in the distributor's token account. */
 async function chain() {
-  const svm = vm(program, "program/target/deploy/token_claim_program.so");
+  const svm = vm({ [program]: deployed("token-claim") });
   const authority = await funded(svm);
   const mint = (await generateKeyPairSigner()).address;
   const mintData = getMintEncoder().encode({ mintAuthority: authority.address, supply: 10_000n, decimals: 0, isInitialized: true, freezeAuthority: null });

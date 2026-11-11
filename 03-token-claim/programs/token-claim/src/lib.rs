@@ -2,9 +2,9 @@
 //! root of a list of `(address, amount)` claims and funds a vault of an SPL token;
 //! each address on the list claims its amount once. The program never hashes and
 //! never sees a Merkle path: the claimant proves the path in the circuit, and the
-//! program checks one proof against public inputs it assembles itself, in the
-//! circuit's order: `root` from the distributor's account, `claimant` (as two
-//! halves) from the transaction's signer, `amount` from the instruction. A proof
+//! program checks one proof against public inputs it fills in itself, by name:
+//! `root` from the distributor's account, `claimant` from the transaction's
+//! signer, `amount` from the instruction. A proof
 //! pays only the wallet it was made for, only its amount, and only from its list.
 //!
 //! Instruction data starts with one byte, which instruction: `0` is

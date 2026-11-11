@@ -3,7 +3,7 @@
 //   #[circuit]
 //   fn token_claim(path: Private<Path>, root: Public<Field>, claim: Public<Claim>)
 //
-// `xark build` records the circuit's parameter types in target/xark/token_claim/schema.json
+// `xark build` records the circuit's parameter types in target/xark/token-claim/schema.json
 // and `xark client` turns them into the types below. Don't edit this file: change
 // the circuit, then rebuild and rerun `xark client`. Values go in their natural
 // forms (dates, strings, variant names, bytes); `@blueshift-gg/xark` encodes them against the
@@ -100,7 +100,7 @@ const schema = {
     }
   },
   "version": 2,
-  "xark": "0.3.0"
+  "xark": "0.4.0"
 };
 
 /** A `Claim` (an input struct). */
@@ -213,7 +213,7 @@ export interface TokenClaimStructs {
 
 /**
  * `token_claim`: make a prover or verifier from a URL serving a copy of
- * `target/xark/token_claim/` (relative to the page in a browser) or from the bytes:
+ * `target/xark/token-claim/` (relative to the page in a browser) or from the bytes:
  *
  * ```ts
  * const prover = await TokenClaim.prover("/circuits/token_claim/");

@@ -1,6 +1,7 @@
 //! A list of one claim, 1000 tokens for the wallet `[7; 32]`, claimed: proved as the
 //! verifier crate's self-test vector (`proof.bin`, `public_inputs.bin`, as `xark
-//! prove` writes them). `npm run build` runs it after `xark setup`.
+//! prove` writes them, in the circuit's build output): run it once after `xark
+//! build`, and the next `xark build` bundles it in `clients/token-claim/rust/`.
 use token_claim::{Claim, Path, TokenClaimInputs};
 
 fn main() {
@@ -14,7 +15,7 @@ fn main() {
         root: path.next(claim.leaf()).list_root(),
         claim,
     };
-    let out = concat!(env!("CARGO_MANIFEST_DIR"), "/target/xark/token_claim");
+    let out = concat!(env!("CARGO_MANIFEST_DIR"), "/target/xark/token-claim");
     let proof = xark::prover::circuit_at(out)
         .prove(inputs)
         .expect("the demo proves");

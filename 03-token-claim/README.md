@@ -95,7 +95,7 @@ beside `Claim.leaf`:
 | `tip.listRoot()` | for the next free leaf's path, the root of the list so far |
 | `path.root(leaf)` | the root with `leaf` at `path`: what the circuit checks |
 
-Built from the [test](./client/token-claim.test.ts), the whole list:
+Built from the [test](./tests/token-claim.test.ts), the whole list:
 
 ```ts
 let tip = Path.first();                       // the next free leaf's path
@@ -155,7 +155,7 @@ make another of the same statement.
 
 ## The program
 
-The [program](./program/src/) is Pinocchio, as 01's and 02's are, with `pinocchio-token` for the
+The [program](./programs/token-claim/src/) is Pinocchio, as 01's and 02's are, with `pinocchio-token` for the
 SPL calls and plain PDAs for its state. `lib.rs` dispatches on the first byte; each instruction is a
 file under `instructions/`, with its accounts, its instruction data and its logic in their own
 structs, the accounts' checks in their `TryFrom`. The program's address is `ID` in `lib.rs`, which
@@ -163,17 +163,21 @@ the client test deploys it at; the PDAs derive from it and the owner checks are 
 `initialize` stores the root, the mint and both
 bumps in the distributor (`state.rs`), and creates the vault, a token account the distributor PDA
 owns, funded with `total` from the authority's account. `claim` checks the vault against the stored
-bump, assembles the public inputs itself and makes one call to the verifier crate `xark export`
-generated:
+bump, fills in the circuit's public inputs itself, by name, and makes one call to the verifier crate
+`xark build` generated (`clients/token-claim/rust`, whose `PublicInputs` packs the address into its
+two halves as the circuit does):
 
 ```rust
-pub fn public_inputs(root: &[u8; 32], claimant: &[u8; 32], amount: u64) -> [[u8; 32]; 4] {
-    let [hi, lo] = halves(claimant);
-    [*root, hi, lo, field(amount)]
-}
+use token_claim_verifier::{Proof, PublicInputs, verify};
 
-let public_inputs = public_inputs(&root, accounts.claimant.address().as_array(), data.amount);
-if !verify(&Proof::from_le_bytes(data.proof), &public_inputs) {
+let inputs = PublicInputs {
+    root,
+    claim: token_claim_verifier::Claim {
+        claimant: *accounts.claimant.address().as_array(),
+        amount: data.amount,
+    },
+};
+if !verify(&Proof::from_le_bytes(data.proof), inputs) {
     return Err(TokenClaimError::InvalidProof.into());
 }
 ```
@@ -183,8 +187,8 @@ names, signed by the distributor PDA. The root comes from the distributor's acco
 from the signer, the amount from the instruction: a proof made for another list, another wallet or
 another amount fails. The receipt is the one PDA the program finds rather than derives from a
 stored bump: it must sit at the canonical bump, or a claimant could claim again at another. The
-program's own test checks the demo proof (`examples/demo.rs`) against
-what it assembles, and that another claimant, amount or root fails.
+program's own test checks the demo proof (`circuits/token-claim/examples/demo.rs`) against
+the inputs it fills in, and that another claimant, amount or root fails.
 
 Anyone can send lamports to an address, and the system program's `CreateAccount` refuses one that
 holds any: a griefer could block a claim by funding its receipt's address first. So the program
@@ -193,15 +197,20 @@ tops such an account up and assigns it instead, and the test does exactly that t
 ## Run it
 
 ```bash
-npm run build           # circuit → key (single-party) → demo proof → verifier crate → client → .so
-npm run test:circuit    # the builder against the whole tree, who claims, what's refused; the program's
-npm test                # prove with the client, claim onchain (LiteSVM)
+xark build     # circuit, its clients (Rust verifier crate, TypeScript), then the program
+xark test      # the builder against the whole tree, who claims, what's refused; the program's; then
+               # prove with the client and claim onchain (LiteSVM)
 ```
 
-`npm run build` makes a single-party key from this machine's randomness (see
-[../RUNBOOK.md](../RUNBOOK.md)), and proves `examples/demo.rs` as the verifier crate's self-test.
+`npm run check` is CI's `xark build --check`: the committed keys and clients are what the source
+builds. Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks them).
 
-The [test](./client/token-claim.test.ts) is the distributor and the claimant: a list of three, a
+The key in `keys/token-claim/` is a single-party setup from one machine's randomness. The verifier
+crate bundles a sample proof as its self-test: `circuits/token-claim/examples/demo.rs` proves it
+(`cargo run --release --example demo` in the circuit's directory, after a `xark build`), and the next
+`xark build` keeps it while it verifies.
+
+The [test](./tests/token-claim.test.ts) is the distributor and the claimant: a list of three, a
 vault funded with their total, and Bob's claim of 1,000. Before it lands, each of these is refused
 by the program: Bob's proof for another amount, the same proof signed by Mallory, and the proof
 against a second distributor whose list also has Bob for 1,000 (another root). Bob's claim pays
@@ -213,7 +222,7 @@ all: the client throws `CheckFailed`, naming `path.root(claim.leaf())`.
 
 | Circuit | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | Onchain CU |
 |---|--:|--:|--:|--:|--:|
-| `token_claim` | 5,437 | 4 | 989 ms | 195 ms | 98,048–104,048 |
+| `token_claim` | 5,437 | 4 | 989 ms | 195 ms | 97,874–103,874 |
 
 Constraints from `xark build` (`xark profile` attributes them: 5,341 to the path and leaf, 96 to the
 `u32` index and `u64` amount checks). Proving in node 22 through the generated client, median of
@@ -222,15 +231,18 @@ whole `claim` in LiteSVM: the verify, the receipt it creates, and the SPL transf
 steps of 1,500, one per extra try of `find_program_address` for the receipt's bump, which depends on
 the claimant's address. A proof is always 256 bytes.
 
-## Anatomy
+## Layout
 
 ```
-circuit/    Claim (the leaf), Path (the tree, for the circuit and the list's builder), the
-            circuit, and the demo proof that's the verifier crate's self-test
-client/     the generated client, and the distributor and claimant test
-program/    Pinocchio + SPL: store the root, hold the vault, verify, write the receipt, pay;
-            lib.rs (dispatch), instructions/{initialize,claim}.rs, state.rs (the distributor),
-            errors.rs (InvalidProof), helpers.rs (account creation, logging)
+circuits/token-claim/   Claim (the leaf), Path (the tree, for the circuit and the list's builder),
+                        the circuit, and examples/demo.rs, the verifier crate's sample proof
+programs/token-claim/   Pinocchio + SPL: store the root, hold the vault, verify, write the receipt,
+                        pay; lib.rs (dispatch), instructions/{initialize,claim}.rs, state.rs (the
+                        distributor), errors.rs (InvalidProof), helpers.rs (account creation, logging)
+clients/token-claim/    generated by `xark build`: the Rust verifier crate and the TypeScript client
+keys/token-claim/       the proving and verifying keys (committed: the verifier embeds the key)
+tests/                  the distributor and claimant test (LiteSVM)
+xark.toml               the xark release the project is made with
 ```
 
 ## Deployment boundaries

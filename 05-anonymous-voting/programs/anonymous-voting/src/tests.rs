@@ -4,17 +4,18 @@
 //! so an instruction that passes every check and asks for rent, to create an
 //! account, ends in `UnsupportedSysvar` ([`reaches_creation`]). The client test runs
 //! the same instructions end to end in LiteSVM.
-use anonymous_voting_xark_verifier::{Proof, verify};
 use pinocchio::account::{NOT_BORROWED, RuntimeAccount};
+use vote_verifier::{Ballot, Fields, Proof, PublicInputs, fields, verify};
 
 use super::*;
 
 const SYSTEM: Address = pinocchio_system::ID;
 
-/// The demo proof (`circuit/examples/demo.rs`: a list of one voter, voting for
-/// option 1 of 3 in poll 7) and its public inputs.
-const PROOF: &[u8; 256] = include_bytes!("../../circuit/vote-verifier/proof.solana.bin");
-const INPUTS: &[u8; 128] = include_bytes!("../../circuit/vote-verifier/public_inputs.solana.bin");
+/// The demo proof (`circuits/vote/examples/demo.rs`: a list of one voter, voting
+/// for option 1 of 3 in poll 7) and its public inputs, as the verifier crate
+/// bundles them.
+const PROOF: &[u8; 256] = include_bytes!("../../../clients/vote/rust/proof.solana.bin");
+const INPUTS: &[u8; 128] = include_bytes!("../../../clients/vote/rust/public_inputs.solana.bin");
 const POLL_ID: u64 = 7;
 const OPTIONS: u8 = 3;
 const CHOICE: u8 = 1;
@@ -144,31 +145,30 @@ fn poll(open: bool) -> Account {
 /// only.
 #[test]
 fn the_demo_proof_verifies_for_its_ballot_only() {
-    let (root, nullifier) = (input(0), input(2));
-    let inputs = public_inputs(&root, POLL_ID, &nullifier, OPTIONS, CHOICE);
-    assert_eq!(inputs.as_flattened(), INPUTS);
+    let poll = poll_bytes(true);
+    let inputs = public_inputs(Poll::load(&poll).unwrap(), &input(2), CHOICE);
+    assert_eq!(Fields::from(inputs).as_flattened(), INPUTS);
     let proof = Proof::from_le_bytes(PROOF);
-    assert!(verify(&proof, &inputs));
-    assert!(!verify(
-        &proof,
-        &public_inputs(&root, POLL_ID, &nullifier, OPTIONS, 0)
-    ));
-    assert!(!verify(
-        &proof,
-        &public_inputs(&root, POLL_ID, &nullifier, 4, CHOICE)
-    ));
-    assert!(!verify(
-        &proof,
-        &public_inputs(&root, 8, &nullifier, OPTIONS, CHOICE)
-    ));
-    assert!(!verify(
-        &proof,
-        &public_inputs(&[1; 32], POLL_ID, &nullifier, OPTIONS, CHOICE)
-    ));
-    assert!(!verify(
-        &proof,
-        &public_inputs(&root, POLL_ID, &[1; 32], OPTIONS, CHOICE)
-    ));
+    assert!(verify(&proof, inputs));
+    let ok = inputs.ballot;
+    for ballot in [
+        Ballot { choice: 0, ..ok },
+        Ballot { options: 4, ..ok },
+        Ballot {
+            poll: fields::uint(8),
+            ..ok
+        },
+        Ballot {
+            root: [1; 32],
+            ..ok
+        },
+        Ballot {
+            nullifier: [1; 32],
+            ..ok
+        },
+    ] {
+        assert!(!verify(&proof, PublicInputs { ballot }));
+    }
 }
 
 // ---- create_poll ---------------------------------------------------------------

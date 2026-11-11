@@ -115,7 +115,7 @@ const schema = {
     }
   },
   "version": 2,
-  "xark": "0.3.0"
+  "xark": "0.4.0"
 };
 
 /** A `Ballot` (an input struct). */

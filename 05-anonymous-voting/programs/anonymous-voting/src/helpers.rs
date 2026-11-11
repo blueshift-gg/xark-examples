@@ -31,13 +31,6 @@ pub fn is_uninitialized(account: &AccountView) -> bool {
     account.owned_by(&pinocchio_system::ID) && account.is_data_empty()
 }
 
-/// A u64 as a 32-byte little-endian field element.
-pub fn field_from_u64(x: u64) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    out[..8].copy_from_slice(&x.to_le_bytes());
-    out
-}
-
 /// `Program log: <message>`.
 pub fn log(message: &str) {
     #[cfg(any(target_os = "solana", target_arch = "bpf"))]

@@ -4,13 +4,14 @@
 // (`Identity.commitment`, `Path`) is the circuit's own Rust, run from TypeScript.
 import { AccountRole, address, getAddressEncoder, getProgramDerivedAddress, type Address, type KeyPairSigner } from "@solana/kit";
 import type { LiteSVM } from "litesvm";
-import { artifacts, funded, send, u64le, vm } from "./harness";
-import { Ballot, Field, Identity, Path, Vote, type PathValue, type VoteProver } from "./vote";
+import { circuit, funded, program as deployed, send, vm } from "@blueshift-gg/xark/testing";
+import { Ballot, Field, Identity, Path, Vote, type PathValue, type VoteProver } from "../clients/vote/ts/vote";
+import { u64le } from "./helpers";
 
 const program = address("HrQMmAAVGe9MhJMXMjQYsNA3g9qztY3TMjG9d4gKT1r6");
 const system = address("11111111111111111111111111111111");
 const bytes = (a: Address) => new Uint8Array(getAddressEncoder().encode(a));
-// The program's instruction discriminators (`program/src/instructions/`).
+// The program's instruction discriminators (`programs/anonymous-voting/src/instructions/`).
 const CREATE_POLL = 0;
 const VOTE = 1;
 const CLOSE_POLL = 2;
@@ -21,7 +22,7 @@ const readonly = (a: Address) => ({ address: a, role: AccountRole.READONLY });
 let prover: VoteProver;
 beforeAll(async () => {
   // Pinned to the circuit this client was generated from: a deployment can't swap it.
-  prover = await Vote.prover(artifacts("circuit", "vote"), { digest: Vote.digest });
+  prover = await Vote.prover(circuit("vote"), { digest: Vote.digest });
 });
 
 /** A new voter: two random field elements, kept by the voter. */
@@ -69,7 +70,7 @@ async function vote(poll: Address, payer: KeyPairSigner, proof: Uint8Array, null
   };
 }
 
-/** The poll's tally, one count per option (`program/src/state.rs`: from byte 80). */
+/** The poll's tally, one count per option (`programs/anonymous-voting/src/state.rs`: from byte 80). */
 function tally(svm: LiteSVM, poll: Address, options: number): bigint[] {
   const account = svm.getAccount(poll);
   if (!account.exists) throw new Error("no poll");
@@ -78,7 +79,7 @@ function tally(svm: LiteSVM, poll: Address, options: number): bigint[] {
 }
 
 test("each voter on the list votes once per poll, and nobody sees who", async () => {
-  const svm = vm(program, "program/target/deploy/anonymous_voting_program.so");
+  const svm = vm({ [program]: deployed("anonymous-voting") });
   const authority = await funded(svm);
   // Any wallet pays for a vote: a relayer, so no voter's wallet appears onchain.
   const relayer = await funded(svm);

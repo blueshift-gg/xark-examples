@@ -71,7 +71,8 @@ pub fn vote(identity: Private<Identity>, path: Private<Path>, ballot: Public<Bal
   index. The index says which voter this is, so it never leaves the voter's device.
 - **Public:** the `Ballot`: `root`, `poll`, `nullifier`, then `options` and `choice`. `#[input]`
   packs consecutive integers into one field element (`options` in bits 0–7, `choice` in 8–15), so
-  that's four public inputs.
+  that's four public inputs. The generated verifier crate packs them the same way: the program
+  names the fields and never shifts a bit.
 - **No `bind`.** `root` and `nullifier` are compared, `poll` is hashed into the nullifier, and
   `options` and `choice` are `u8`s, range-checked on entry and then ordered. Every public input is
   already in the constraints.
@@ -144,19 +145,27 @@ break the proof. It just puts your name beside your vote, the one thing the circ
 
 ## The program
 
-The [program](./program/src/lib.rs) is Pinocchio: `lib.rs` dispatches on each instruction's
-discriminator to [`instructions/`](./program/src/instructions/), and the poll's layout is in
-[`state.rs`](./program/src/state.rs). `create_poll` stores the root, the option count and an empty
-tally. `vote` assembles the public inputs itself and makes one call to the verifier crate `xark
-export` generated:
+The [program](./programs/anonymous-voting/src/lib.rs) is Pinocchio: `lib.rs` dispatches on each
+instruction's discriminator to [`instructions/`](./programs/anonymous-voting/src/instructions/), and
+the poll's layout is in [`state.rs`](./programs/anonymous-voting/src/state.rs). `create_poll` stores
+the root, the option count and an empty tally. `vote` assembles the public inputs itself, by name,
+and makes one call to the verifier crate `xark build` generated
+([`clients/vote/rust`](./clients/vote/rust/src/lib.rs)), which packs them as the circuit does:
 
 ```rust
-pub fn public_inputs(root: &[u8; 32], poll_id: u64, nullifier: &[u8; 32], options: u8, choice: u8) -> [[u8; 32]; 4] {
-    let packed = u64::from(options) | u64::from(choice) << 8;
-    [*root, field_from_u64(poll_id), *nullifier, field_from_u64(packed)]
+pub fn public_inputs(poll: &Poll, nullifier: &[u8; 32], choice: u8) -> PublicInputs {
+    PublicInputs {
+        ballot: Ballot {
+            root: poll.root,
+            poll: fields::uint(u64::from_le_bytes(poll.id).into()),
+            nullifier: *nullifier,
+            options: poll.options,
+            choice,
+        },
+    }
 }
 
-if !verify(&Proof::from_le_bytes(self.data.proof), &public_inputs) {
+if !verify(&Proof::from_le_bytes(self.data.proof), inputs) {
     return Err(VotingError::InvalidProof.into());
 }
 ```
@@ -169,23 +178,27 @@ canonical field element, so `nullifier + r` can't pass for `nullifier` at anothe
 Lamports sent to a receipt's address beforehand don't block a vote: creation tops them up. The
 optional `close_poll` lets the authority freeze the tally.
 
-The program's own [tests](./program/src/tests.rs) run on the host, against accounts laid out as the
-runtime lays them out. They check that the demo proof (`circuit/examples/demo.rs`) verifies against
+The program's own [tests](./programs/anonymous-voting/src/tests.rs) run on the host, against accounts
+laid out as the runtime lays them out. They check that the demo proof
+([`circuits/vote/examples/demo.rs`](./circuits/vote/examples/demo.rs)) verifies against
 what the program assembles, and not for another choice, option count, poll, root or nullifier. They
 also check that each account check refuses what it should.
 
 ## Run it
 
 ```bash
-npm run build           # circuit → key (single-party) → demo proof → verifier crate → client → .so
-npm run test:circuit    # the builder against the whole tree, who votes, what's refused; the program's
-npm test                # prove with the client, vote onchain through a relayer (LiteSVM)
+xark build     # the circuit, its clients (Rust verifier crate, TypeScript), then the program
+xark test      # the circuit's tests (the builder against the whole tree, who votes, what's
+               # refused), the program's, then prove and vote onchain through a relayer (LiteSVM)
 ```
 
-`npm run build` makes a single-party key from this machine's randomness (see
-[../RUNBOOK.md](../RUNBOOK.md)), and proves `examples/demo.rs` as the verifier crate's self-test.
+`npm run check` is CI's `xark build --check`: the committed keys and clients are what the source
+builds. The keys in [`keys/vote/`](./keys/vote/) are a single-party setup from one machine's
+randomness (see [../RUNBOOK.md](../RUNBOOK.md)). The verifier crate bundles a sample proof as its
+self-test, made by `examples/demo.rs`; for a new key, run `xark setup`, then `cargo run --release
+-p vote --example demo` before `xark build`.
 
-The [test](./client/anonymous-voting.test.ts) is the authority, five voters and a relayer. The
+The [test](./tests/anonymous-voting.test.ts) is the authority, five voters and a relayer. The
 authority builds the list with the circuit's own `Identity.commitment` and `Path`, and creates a
 three-option poll. Three voters vote through the relayer, and the tally reads `[1, 0, 2]`. Then
 the program refuses each of these:
@@ -222,10 +235,14 @@ bump. A proof is always 256 bytes.
 ## Anatomy
 
 ```
-circuit/    Identity (commitment, nullifier), Path (the list, for the circuit and its builder),
-            Ballot, the circuit, and the demo proof that's the verifier crate's self-test
-client/     the generated client, and the authority, voter and relayer test
-program/    Pinocchio: create a poll, verify a vote, write its receipt, count it; close the poll
+circuits/vote/               Identity (commitment, nullifier), Path (the list, for the circuit and
+                             its builder), Ballot, the circuit, and the demo proof that's the
+                             verifier crate's self-test
+programs/anonymous-voting/   Pinocchio: create a poll, verify a vote, write its receipt, count it;
+                             close the poll
+clients/vote/                generated by `xark build`: the verifier crate (rust/), the client (ts/)
+keys/vote/                   the proving and verifying keys the clients embed
+tests/                       the authority, voter and relayer test
 ```
 
 ## Deployment boundaries

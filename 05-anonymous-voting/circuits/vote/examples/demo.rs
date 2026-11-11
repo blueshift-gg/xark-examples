@@ -1,6 +1,7 @@
 //! A list of one voter, voting for option 1 of 3 in poll 7: proved as the verifier
 //! crate's self-test vector (`proof.bin`, `public_inputs.bin`, as `xark prove`
-//! writes them). `npm run build` runs it after `xark setup`.
+//! writes them), which `xark build` bundles into `clients/vote/rust`. Run it after a
+//! new `xark setup`: `cargo run --release -p vote --example demo`.
 use vote::{Ballot, Identity, Path, VoteInputs};
 use xark::Field;
 

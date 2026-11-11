@@ -1,13 +1,13 @@
-use anonymous_voting_xark_verifier::{Proof, verify};
 use pinocchio::{
     AccountView, Address, ProgramResult,
     cpi::{Seed, Signer},
     error::ProgramError,
 };
+use vote_verifier::{Ballot, Proof, PublicInputs, fields, verify};
 
 use crate::{
     VotingError,
-    helpers::{field_from_u64, is_uninitialized, system_program, writable, writable_signer},
+    helpers::{is_uninitialized, system_program, writable, writable_signer},
     state::{Poll, VOTED_SEED},
 };
 
@@ -104,23 +104,17 @@ impl<'a> Vote<'a> {
     pub const DISCRIMINATOR: &'a u8 = &1;
 
     pub fn process(&mut self) -> ProgramResult {
-        let public_inputs = {
+        let inputs = {
             let data = self.accounts.poll.try_borrow()?;
             let poll = Poll::load(&data)?;
             if !poll.is_open() {
                 return Err(VotingError::PollClosed.into());
             }
-            public_inputs(
-                &poll.root,
-                u64::from_le_bytes(poll.id),
-                self.data.nullifier,
-                poll.options,
-                self.data.choice,
-            )
+            public_inputs(poll, self.data.nullifier, self.data.choice)
         };
         // The verifier refuses a public input that isn't a canonical field element, so
         // `nullifier + r` can't pass for `nullifier` at another receipt's address.
-        if !verify(&Proof::from_le_bytes(self.data.proof), &public_inputs) {
+        if !verify(&Proof::from_le_bytes(self.data.proof), inputs) {
             return Err(VotingError::InvalidProof.into());
         }
 
@@ -144,23 +138,17 @@ impl<'a> Vote<'a> {
     }
 }
 
-/// The circuit's public `Ballot`, in its order (`xark inspect --json`): `root`,
-/// `poll`, `nullifier`, then `options` and `choice` in one field element.
-/// `#[input]` packs a struct's consecutive integers into one, the first in the
-/// lowest bits: `options` in bits 0–7, `choice` in 8–15. Each a 32-byte
-/// little-endian field element.
-pub fn public_inputs(
-    root: &[u8; 32],
-    poll_id: u64,
-    nullifier: &[u8; 32],
-    options: u8,
-    choice: u8,
-) -> [[u8; 32]; 4] {
-    let packed = u64::from(options) | u64::from(choice) << 8;
-    [
-        *root,
-        field_from_u64(poll_id),
-        *nullifier,
-        field_from_u64(packed),
-    ]
+/// The circuit's public `Ballot`: `root`, `poll` and `options` from the poll's
+/// account (its id, a u64, is the circuit's `poll`), `nullifier` and `choice` from
+/// the instruction.
+pub fn public_inputs(poll: &Poll, nullifier: &[u8; 32], choice: u8) -> PublicInputs {
+    PublicInputs {
+        ballot: Ballot {
+            root: poll.root,
+            poll: fields::uint(u64::from_le_bytes(poll.id).into()),
+            nullifier: *nullifier,
+            options: poll.options,
+            choice,
+        },
+    }
 }

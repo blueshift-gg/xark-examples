@@ -11,6 +11,7 @@
 // --inputs` does.
 
 import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type FieldInput, type Json, type Proof, type Prover, type U32, type U64, type Verifier } from "@blueshift-gg/xark/client";
+import type { Address } from "@solana/kit";
 export { CheckFailed, Field, InputError, fromHex, toHex };
 
 // The circuit's schema.json.
@@ -44,24 +45,9 @@ const schema = {
     "claim.amount"
   ],
   "types": {
-    "Claim": {
-      "struct": [
-        {
-          "name": "claimant",
-          "type": {
-            "ref": "Hash"
-          }
-        },
-        {
-          "name": "amount",
-          "type": {
-            "uint": 64
-          }
-        }
-      ]
-    },
-    "Hash": {
+    "Address": {
       "encoding": {
+        "base58": true,
         "bytes": 32,
         "concat": [
           16,
@@ -76,6 +62,22 @@ const schema = {
         {
           "name": "lo",
           "type": "field"
+        }
+      ]
+    },
+    "Claim": {
+      "struct": [
+        {
+          "name": "claimant",
+          "type": {
+            "ref": "Address"
+          }
+        },
+        {
+          "name": "amount",
+          "type": {
+            "uint": 64
+          }
         }
       ]
     },
@@ -105,8 +107,8 @@ const schema = {
 
 /** A `Claim` (an input struct). */
 export interface Claim {
-  /** `Hash`: its 32 bytes. */
-  claimant: Uint8Array;
+  /** A Solana address (base58), or its 32 bytes. */
+  claimant: Address | Uint8Array;
   amount: U64;
 }
 
@@ -132,11 +134,11 @@ export interface TokenClaimPublicInputs {
 
 /** A `Claim`, decoded, with its Rust methods. */
 export class ClaimValue {
-  claimant: Uint8Array;
+  claimant: Address;
   amount: bigint;
 
   constructor(v: {
-    claimant: Uint8Array;
+    claimant: Address;
     amount: bigint;
   }) {
     this.claimant = v.claimant;
@@ -168,6 +170,7 @@ export class PathValue {
   /**
    * The path of the leaf after this one, once `leaf` is at this path: for the next
    * free leaf's path, the next free leaf's path after adding `leaf` to the list.
+   * (A Rust client that holds the whole list uses [`list`], a `Tree`, instead.)
    */
   next(leaf: FieldInput): PathValue {
     return Path.next(this, leaf);
@@ -175,8 +178,7 @@ export class PathValue {
 
   /**
    * The root of the tree with `leaf` at this path. In a circuit this binds `index`
-   * below 2^20, and `cond_swap` (`xark-merkle`'s, its rows proven in Lean) each
-   * of its bits to 0 or 1.
+   * below 2^20, and `merkle_root` each of its bits to 0 or 1.
    */
   root(leaf: FieldInput): Field {
     return Path.root(this, leaf);
@@ -240,14 +242,14 @@ export const Path = {
   /**
    * The path of the leaf after this one, once `leaf` is at this path: for the next
    * free leaf's path, the next free leaf's path after adding `leaf` to the list.
+   * (A Rust client that holds the whole list uses [`list`], a `Tree`, instead.)
    */
   next(path: Path, leaf: FieldInput): PathValue {
     return decodePath(TokenClaim.call<Json<PathValue>>("Path.next", [path, leaf]));
   },
   /**
    * The root of the tree with `leaf` at this path. In a circuit this binds `index`
-   * below 2^20, and `cond_swap` (`xark-merkle`'s, its rows proven in Lean) each
-   * of its bits to 0 or 1.
+   * below 2^20, and `merkle_root` each of its bits to 0 or 1.
    */
   root(path: Path, leaf: FieldInput): Field {
     return new Field(TokenClaim.call<Json<Field>>("Path.root", [path, leaf]));
@@ -294,7 +296,7 @@ function decodePublic(v: Json<TokenClaimPublicValues>): TokenClaimPublicValues {
 
 function decodeClaim(v: Json<ClaimValue>): ClaimValue {
   return new ClaimValue({
-    claimant: fromHex(v.claimant),
+    claimant: v.claimant,
     amount: BigInt(v.amount),
   });
 }

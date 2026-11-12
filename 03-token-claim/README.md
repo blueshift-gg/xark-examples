@@ -13,15 +13,16 @@ with the path as a private input. That proof is what entitles them to claim the 
 
 ## The list is a tree
 
-Each claim is a leaf, and the list is the leaves in order, padded with an empty leaf to 2^20:
+Each claim is a leaf, and the list is the leaves in order, padded with an empty leaf to 2^20. The
+tree is `xark-merkle`'s Poseidon2 tree (`xark_merkle::poseidon2`):
 
 ```
 leaf = Poseidon2.hash([claimant.hi, claimant.lo, amount])
 node = Poseidon2.hash2(left, right)
 ```
 
-A Solana address is wider than the BN254 field, so it enters as xark's `Hash`, two 16-byte halves,
-as 02's holder does. Leaves and nodes are both Poseidon2 (`xark-poseidon2`), but two different
+A Solana address is wider than the BN254 field, so it enters as xark's `Address`, two 16-byte
+halves, as 02's holder does. Leaves and nodes are both Poseidon2 (`xark-poseidon2`), but two different
 functions of it, so they're separated without a tag. `hash` is a sponge whose capacity lane starts
 at the input's length, 3, and a three-field leaf takes two permutations; `hash2` is one permutation
 of `[left, right, 0]`, capacity 0. And the depth is fixed: every path has 20 levels, so a node can't
@@ -31,9 +32,11 @@ claim hashes to, so the padding can't be claimed.
 ## The circuit
 
 ```rust
+use xark_merkle::poseidon2::merkle_root;
+
 #[input]
 pub struct Claim {
-    pub claimant: Hash,
+    pub claimant: Address,
     pub amount: u64,
 }
 
@@ -53,16 +56,7 @@ pub struct Path {
 impl Path {
     /// The root of the tree with `leaf` at this path.
     pub fn root(&self, leaf: Field) -> Field {
-        let bits = Field::from(self.index).to_bits::<DEPTH>();
-        let mut node = leaf;
-        let mut i = 0;
-        while i < DEPTH {
-            // The bit orders the pair: 0, this node is the left child; 1, the right.
-            let (left, right) = cond_swap(bits[i], node, self.siblings[i]);
-            node = hash2(left, right);
-            i += 1;
-        }
-        node
+        merkle_root(leaf, self.siblings, Field::from(self.index).to_bits::<DEPTH>())
     }
 }
 
@@ -73,8 +67,9 @@ pub fn token_claim(path: Private<Path>, root: Public<Field>, claim: Public<Claim
 ```
 
 - **Private:** the `Path`, its 20 siblings and the leaf's index. `to_bits::<20>()` decomposes the
-  index into the bits that steer each level, and binds it below 2^20; `cond_swap` (`xark-merkle`'s,
-  its rows proven in Lean) constrains each bit to 0 or 1 and orders the pair.
+  index into the bits that steer each level, and binds it below 2^20; `merkle_root` folds the path,
+  each level a `cond_swap` (its rows proven in Lean), which constrains the bit to 0 or 1 and orders
+  the pair, then a `hash2`.
 - **Public:** `root`, then `claim`: `claimant` (hi, lo) and `amount`. Four field elements.
 - **No `bind`.** 02 needed `bind(holder)` because nothing else used the holder. Here the leaf hashes
   `claimant` and `amount`, and `amount` is a `u64`, range-checked on entry, so every public input is
@@ -83,9 +78,12 @@ pub fn token_claim(path: Private<Path>, root: Public<Field>, claim: Public<Claim
 ## The list's builder is the circuit's Rust
 
 The distributor and the claimant both need the circuit's hashing: the distributor for the root it
-publishes, the claimant for the path it proves. Neither reimplements it. `Path` carries host-only
-functions (`#[cfg(not(xark))]`), and `#[input] impl` puts them in the generated TypeScript client
-beside `Claim.leaf`:
+publishes, the claimant for the path it proves. Neither reimplements it. In Rust, the crate's
+`list()` is the empty list as a `xark_merkle::tree::Tree`, the host builder of the tree the circuit
+folds: push each claim's leaf, then take its `root()` and each claim's `path(i)` (the demo proof is
+built this way). A `Tree` isn't an `#[input]` type, so it doesn't reach the TypeScript client;
+`Path` carries host-only functions (`#[cfg(not(xark))]`) that do, through `#[input] impl`, beside
+`Claim.leaf`:
 
 | Function | What it is |
 |---|---|
@@ -112,11 +110,10 @@ prover.prove({ path: paths[i], root, claim: claims[i] });
 
 A generated client function takes `#[input]` types, which are fixed-size, so the list itself stays a
 TypeScript array and the loop calls the Rust once per step. It updates every path at every step,
-quadratic in the list: fine for the test's three, too slow for a million. A real distributor hashes
-the tree once, level by level, in Rust with the same `xark_poseidon2::hash2` (as the circuit's tests
-do to check the builder), and hands each claimant its path, which the claimant checks with
-`path.root(Claim.leaf(claim))` before proving. The circuit's tests check every root and path the
-builder makes against that tree hashed from scratch.
+quadratic in the list: fine for the test's three, too slow for a million. A real distributor builds
+the tree once in Rust with `list()` (`Tree::extend` hashes each node once), and hands each claimant
+its path, which the claimant checks with `path.root(Claim.leaf(claim))` before proving. The
+circuit's tests check every root and path `Path`'s builder makes against the `Tree`'s.
 
 ## What hiding the path buys
 
@@ -198,7 +195,7 @@ tops such an account up and assigns it instead, and the test does exactly that t
 
 ```bash
 xark build     # circuit, its clients (Rust verifier crate, TypeScript), then the program
-xark test      # the builder against the whole tree, who claims, what's refused; the program's; then
+xark test      # the builder against the Tree, who claims, what's refused; the program's; then
                # prove with the client and claim onchain (LiteSVM)
 ```
 
@@ -235,7 +232,8 @@ the claimant's address. A proof is always 256 bytes.
 
 ```
 circuits/token-claim/   Claim (the leaf), Path (the tree, for the circuit and the list's builder),
-                        the circuit, and examples/demo.rs, the verifier crate's sample proof
+                        list() (the Rust builder), the circuit, and examples/demo.rs, the
+                        verifier crate's sample proof
 programs/token-claim/   Pinocchio + SPL: store the root, hold the vault, verify, write the receipt,
                         pay; lib.rs (dispatch), instructions/{initialize,claim}.rs, state.rs (the
                         distributor), errors.rs (InvalidProof), helpers.rs (account creation, logging)
@@ -281,7 +279,7 @@ system program. Public inputs: `root`, `claim` (`claimant (hi, lo), amount`).
 | `vault` | `["vault", distributor]` | an SPL token account, owner `distributor` |
 | `receipt` | `["claimed", distributor, claimant]` | nothing: that it exists is the claim |
 
-An address enters the circuit as a `Hash`, `[hi, lo]`: each 16-byte half read as a big-endian
+An address enters the circuit as an `Address`, `[hi, lo]`: each 16-byte half read as a big-endian
 integer, as a little-endian field element.
 
 ### Errors

@@ -100,9 +100,9 @@ test("a claimant on the list claims their amount, once, for their wallet only", 
   const [alice, bob, carol] = await Promise.all([funded(c.svm), funded(c.svm), funded(c.svm)]);
   // The distributor's list, and the root it publishes: the circuit's own hashing.
   const claims: Claim[] = [
-    { claimant: bytes(alice.address), amount: 500 },
-    { claimant: bytes(bob.address), amount: 1_000 },
-    { claimant: bytes(carol.address), amount: 250 },
+    { claimant: alice.address, amount: 500 },
+    { claimant: bob.address, amount: 1_000 },
+    { claimant: carol.address, amount: 250 },
   ];
   const { root, paths } = list(claims);
   const drop = await distribute(c, root, 1_750n);
@@ -120,7 +120,7 @@ test("a claimant on the list claims their amount, once, for their wallet only", 
   const malloryToken = await tokenAccount(c.svm, c.mint, mallory.address, 0n);
   await expect(send(c.svm, mallory, await claim(drop, mallory, malloryToken, proof, 1_000n))).rejects.toThrow(/InvalidProof/);
   // Another list, with Bob on it for the same amount: its root isn't the proof's.
-  const other = list([claims[1], { claimant: bytes(mallory.address), amount: 750 }]);
+  const other = list([claims[1], { claimant: mallory.address, amount: 750 }]);
   const otherDrop = await distribute(c, other.root, 1_750n);
   await expect(send(c.svm, bob, await claim(otherDrop, bob, bobToken, proof, 1_000n))).rejects.toThrow(/InvalidProof/);
 
@@ -145,10 +145,10 @@ test("a claimant on the list claims their amount, once, for their wallet only", 
 
 test("an address not on the list has no proof", async () => {
   const [alice, stranger] = await Promise.all([generateKeyPairSigner(), generateKeyPairSigner()]);
-  const { root, paths } = list([{ claimant: bytes(alice.address), amount: 500 }]);
+  const { root, paths } = list([{ claimant: alice.address, amount: 500 }]);
   // At Alice's path, or the next free one: no leaf of the list is the stranger's.
-  for (const path of [paths[0], paths[0].next(Claim.leaf({ claimant: bytes(alice.address), amount: 500 }))]) {
-    const prove = () => prover.prove({ path, root, claim: { claimant: bytes(stranger.address), amount: 500 } });
+  for (const path of [paths[0], paths[0].next(Claim.leaf({ claimant: alice.address, amount: 500 }))]) {
+    const prove = () => prover.prove({ path, root, claim: { claimant: stranger.address, amount: 500 } });
     expect(prove).toThrow(/path\.root\(claim\.leaf\(\)\)/);
   }
 });

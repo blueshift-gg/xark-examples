@@ -2,17 +2,18 @@
 //! verifier crate's self-test vector (`proof.bin`, `public_inputs.bin`, as `xark
 //! prove` writes them, in the circuit's build output): run it once after `xark
 //! build`, and the next `xark build` bundles it in `clients/token-claim/rust/`.
-use token_claim::{Claim, Path, TokenClaimInputs};
+use token_claim::{Claim, TokenClaimInputs, list};
 
 fn main() {
     let claim = Claim {
         claimant: [7; 32].into(),
         amount: 1_000,
     };
-    let path = Path::first();
+    let mut tree = list();
+    let index = tree.push(claim.leaf());
     let inputs = TokenClaimInputs {
-        path,
-        root: path.next(claim.leaf()).list_root(),
+        path: tree.path(index).into(),
+        root: tree.root(),
         claim,
     };
     let out = concat!(env!("CARGO_MANIFEST_DIR"), "/target/xark/token-claim");

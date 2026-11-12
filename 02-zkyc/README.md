@@ -267,7 +267,7 @@ owner sets, and build its `Policy` the same way.
 
 | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | Onchain CU |
 |--:|--:|--:|--:|--:|
-| 1,350 | 5 | 211 ms | 70 ms | 100,203 |
+| 1,350 | 5 | 211 ms | 70 ms | 102,549 |
 
 Measured as in the [root README](../README.md#numbers): `xark inspect`, the generated client in
 node, the whole instruction in LiteSVM.

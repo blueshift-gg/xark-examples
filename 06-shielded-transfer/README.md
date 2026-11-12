@@ -142,7 +142,7 @@ the vault; withdrawals and fees transfer out, signed by the pool PDA. A transact
 token accounts it uses: a deposit its source (`user_token`), a withdrawal its destination
 (`recipient_token`), a fee the relayer's (`relayer_token`).
 
-A transact uses 166k to 180k compute units (measured in the test over six runs), almost all of it
+A transact uses 171k to 183k compute units (measured in the test over six runs), almost all of it
 the Groth16 check. It varies with the public inputs, and by 1.5k for each extra try
 `find_program_address` takes to find a nullifier's bump. That's close to the default limit of 200k,
 so the client asks for 250k with a compute budget instruction.
@@ -200,8 +200,8 @@ client names the failing line, `key.address(spend.diversifier)`. The wallet keep
 `Path` current as outputs land, with 04's `Path.update`.
 
 It proves across 8 worker threads: [`pooled`](./tests/helpers.ts) hands the client `@blueshift-gg/xark` with
-`prove` routed through its worker pool, as the prover's `wasm` option. On an M4 Max that's about
-0.9 s per proof instead of 3.7 s, with the same proofs and the same errors.
+`prove` routed through its worker pool, as the prover's `wasm` option. On an M3 Max that's about
+0.9 s per proof instead of 4 s, with the same proofs and the same errors.
 
 ## Anatomy
 

@@ -63,7 +63,7 @@ From [02's test](./02-zkyc/tests/zkyc.test.ts), the whole app side:
 const prover = await Zkyc.prover("/circuits/zkyc/", { digest: Zkyc.digest });
 const commitment = Identity.commitment(id);   // the circuit crate's Rust, run from TypeScript
 const policy = Policy.default().on(new Date()).minAge(18).worthAtLeast(500_000).nationalities(["DE", "FR", "GB", "US"]);
-const proof = prover.prove({ id, commitment, policy, holder: walletBytes });
+const proof = prover.prove({ id, commitment, policy, holder: wallet.address });
 // → a transaction signed by the holder, data: proof.toBytes() ‖ commitment.toBytes()
 ```
 
@@ -91,17 +91,17 @@ its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
 | Circuit | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | Onchain CU |
 |---|--:|--:|--:|--:|--:|
 | 01 `over_9000` | 128 | 0 | 20 ms | 9 ms | 75,903 |
-| 02 `zkyc` | 1,350 | 5 | 211 ms | 70 ms | 100,203 |
+| 02 `zkyc` | 1,350 | 5 | 211 ms | 70 ms | 102,549 |
 | 03 `token_claim` | 5,437 | 4 | 989 ms | 195 ms | 97,874–103,874 |
-| 04 `shielded_pool_deposit` | 9,647 | 4 | 1,635 ms | 403 ms | 91,154–91,747 |
-| 04 `shielded_pool_withdraw` | 5,382 | 7 | 920 ms | 180 ms | 110,351–113,351 |
+| 04 `shielded_pool_deposit` | 9,747 | 4 | 1,690 ms | 345 ms | 91,163–91,748 |
+| 04 `shielded_pool_withdraw` | 5,442 | 7 | 1,021 ms | 212 ms | 110,355–113,355 |
 | 05 `vote` | 5,401 | 4 | 947 ms | 191 ms | 90,229–100,635 |
-| 06 `shielded_transact` | 26,123 | 19 | 3,736 ms | 896 ms | 166k–180k |
+| 06 `shielded_transact` | 25,086 | 19 | 3,979 ms | 860 ms | 171k–183k |
 
 Constraints from `xark inspect`. Proving in node through the generated clients; "8 workers" is
-`@blueshift-gg/xark`'s worker pool. The prove times come from two machines: 01, 02, 04 and 06 in
-node 24 on an Apple M4 Max, median of three; 03 and 05 in node 22 on an Apple M3 Max, median of
-five, so compare their times with the others' loosely. Compute units are the whole instruction in
+`@blueshift-gg/xark`'s worker pool. The prove times come from two machines: 01 and 02 in node 24 on
+an Apple M4 Max, median of three; 03 to 06 on an Apple M3 Max, 03 and 05 in node 22, median of
+five, and 04 and 06 in node 26, median of three, so compare their times with the others' loosely. Compute units are the whole instruction in
 LiteSVM, so 03 to 06 include the accounts they create and the tokens or lamports they move. They
 vary with the public inputs, and by 1,500 for each extra try a program takes to find a new
 account's bump.

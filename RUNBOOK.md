@@ -117,9 +117,10 @@ client to the circuit and key it was made for: `Circuit.prover(url, { digest })`
    what the program fills in, as the generated crate's `PublicInputs`; the crate packs it in the
    circuit's order: a reordered field needs nothing from the program, and a renamed or removed
    one is a compile error there, not a proof that fails.
-2. **One tree definition.** Every circuit root is `xark-merkle`'s `merkle_root`; the wallet's
-   `Path` (through the client) is tested against a tree hashed from scratch, and the client tests
-   check each program's empty root against `Path.first().treeRoot()`.
+2. **One tree definition.** Every tree is `xark-merkle`'s Poseidon2 tree: every circuit root is its
+   `merkle_root` (an append its `merkle_append`), the wallet's `Path` (through the client) is tested
+   against `xark_merkle::tree`'s builder, and the client tests check each program's empty root
+   against `Path.first().treeRoot()`.
 3. **Single-writer tree tip.** Deposit and transact proofs bind the current root and append index.
    A wallet or relayer must sequence submissions, refresh pool state immediately before proving,
    and prove again when another append wins the race. A high-throughput product needs a

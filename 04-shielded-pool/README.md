@@ -285,9 +285,9 @@ logs its name and message. Everything else fails with a built-in `ProgramError`:
 
 | Instruction | Onchain CU |
 |---|--:|
-| `initialize` | 2,988 |
-| `deposit` | 91,154 to 91,747 |
-| `withdraw` | 110,351 to 113,351 |
+| `initialize` | 2,991 |
+| `deposit` | 91,163 to 91,748 |
+| `withdraw` | 110,355 to 113,355 |
 
 Measured in the client test's LiteSVM, the whole instruction with its system-program CPI. A deposit
 varies with its public inputs; a withdrawal also with how many bumps the nullifier's address takes

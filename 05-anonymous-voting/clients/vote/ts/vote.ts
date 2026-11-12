@@ -177,6 +177,7 @@ export class PathValue {
   /**
    * The path of the leaf after this one, once `leaf` is at this path: for the next
    * free leaf's path, the next free leaf's path after adding `leaf` to the list.
+   * (A Rust client that holds the whole list uses [`list`], a `Tree`, instead.)
    */
   next(leaf: FieldInput): PathValue {
     return Path.next(this, leaf);
@@ -184,8 +185,7 @@ export class PathValue {
 
   /**
    * The root of the tree with `leaf` at this path. In a circuit this binds `index`
-   * below 2^20, and `cond_swap` (`xark-merkle`'s, its rows proven in Lean) each
-   * of its bits to 0 or 1.
+   * below 2^20, and `merkle_root` each of its bits to 0 or 1.
    */
   root(leaf: FieldInput): Field {
     return Path.root(this, leaf);
@@ -237,7 +237,7 @@ export const Vote = new Circuit<VoteInputs, VotePublicInputs, VotePublicValues, 
   schema,
   decodePublic,
   client: true,
-  digest: "ce0b157239ad8e60d3ce20bccf1a7eaa",
+  digest: "cc4e57f3aa1855badd92cb19f59ede78",
 });
 
 export type VoteProver = Prover<VoteInputs, VotePublicInputs, VotePublicValues, VoteStructs>;
@@ -259,14 +259,14 @@ export const Path = {
   /**
    * The path of the leaf after this one, once `leaf` is at this path: for the next
    * free leaf's path, the next free leaf's path after adding `leaf` to the list.
+   * (A Rust client that holds the whole list uses [`list`], a `Tree`, instead.)
    */
   next(path: Path, leaf: FieldInput): PathValue {
     return decodePath(Vote.call<Json<PathValue>>("Path.next", [path, leaf]));
   },
   /**
    * The root of the tree with `leaf` at this path. In a circuit this binds `index`
-   * below 2^20, and `cond_swap` (`xark-merkle`'s, its rows proven in Lean) each
-   * of its bits to 0 or 1.
+   * below 2^20, and `merkle_root` each of its bits to 0 or 1.
    */
   root(path: Path, leaf: FieldInput): Field {
     return new Field(Vote.call<Json<Field>>("Path.root", [path, leaf]));
@@ -296,16 +296,15 @@ export const Path = {
 /** `Identity`'s Rust functions (`#[input] impl Identity`), run from `client.wasm`. */
 export const Identity = {
   /**
-   * What a vote in `poll` reveals: `Poseidon2(nullifier_key, poll)`, the
-   * compression. One per voter per poll; across polls, unlinkable without the
-   * `nullifier_key`.
+   * What a vote in `poll` reveals: `nullifier(nullifier_key, poll)`. One per voter
+   * per poll; across polls, unlinkable without the `nullifier_key`.
    */
   nullifier(identity: Identity, poll: FieldInput): Field {
     return new Field(Vote.call<Json<Field>>("Identity.nullifier", [identity, poll]));
   },
   /**
-   * What the voter registers, and the list holds: `Poseidon2(nullifier_key,
-   * trapdoor)`, the sponge.
+   * What the voter registers, and the list holds: `commit(nullifier_key,
+   * trapdoor)`.
    */
   commitment(identity: Identity): Field {
     return new Field(Vote.call<Json<Field>>("Identity.commitment", [identity]));

@@ -18,21 +18,21 @@ A voter picks two random field elements and registers a commitment to them:
 
 ```
 identity   = (nullifier_key, trapdoor)       kept by the voter
-commitment = Poseidon2.hash([nullifier_key, trapdoor])      on the voter list, a leaf
-nullifier  = Poseidon2.hash2(nullifier_key, poll)           revealed by a vote in `poll`
+commitment = Poseidon2.commit([nullifier_key, trapdoor])       on the voter list, a leaf
+nullifier  = Poseidon2.nullifier([nullifier_key, poll])        revealed by a vote in `poll`
 ```
 
-The list is 03's tree: each commitment is a leaf, the leaves in order, padded with an empty leaf to
-2^20, and each node is `hash2(left, right)`. The authority sees commitments, and the chain sees
-nullifiers. Neither says anything about the other without the `nullifier_key`.
+The list is 03's tree, `xark-merkle`'s Poseidon2 tree: each commitment is a leaf, the leaves in
+order, padded with an empty leaf to 2^20, and each node is `hash2(left, right)`. The authority sees
+commitments, and the chain sees nullifiers. Neither says anything about the other without the
+`nullifier_key`.
 
-There are three hashes and two functions of Poseidon2 (`xark-poseidon2`). A commitment is the
-sponge `hash`, whose capacity lane starts at the input's length, 2. A node and a nullifier are the
-compression `hash2`, one permutation of `[a, b, 0]`, capacity 0. So no node is a voter's
-commitment, and with the depth fixed at 20, a node can't be passed off as a voter at a shallower
-one. A nullifier is never a leaf, so sharing `hash2` with the nodes doesn't let one stand in for
-the other. The empty leaf is ASCII `xarkzero`, a constant that no commitment hashes to, so the
-padding can't vote.
+There are three hashes, each in its own domain of Poseidon2 (`xark-poseidon2`). `commit` and
+`nullifier` are the sponge with its capacity lane started at `2^64 · 1 + 2` and `2^64 · 2 + 2` (the
+domain, then the input's length), and a node is the compression `hash2`, one permutation of
+`[a, b, 0]`, capacity 0. So no node is a voter's commitment, no nullifier is either, and with the
+depth fixed at 20, a node can't be passed off as a voter at a shallower one. The empty leaf is
+ASCII `xarkzero`, a constant that no commitment hashes to, so the padding can't vote.
 
 ## The circuit
 
@@ -42,8 +42,8 @@ pub struct Identity { pub nullifier_key: Field, pub trapdoor: Field }
 
 #[input]
 impl Identity {
-    pub fn commitment(&self) -> Field { hash([self.nullifier_key, self.trapdoor]) }
-    pub fn nullifier(&self, poll: Field) -> Field { hash2(self.nullifier_key, poll) }
+    pub fn commitment(&self) -> Field { commit([self.nullifier_key, self.trapdoor]) }
+    pub fn nullifier(&self, poll: Field) -> Field { nullifier([self.nullifier_key, poll]) }
 }
 
 /// What the program checks a vote against, the public inputs in this order.
@@ -64,8 +64,9 @@ pub fn vote(identity: Private<Identity>, path: Private<Path>, ballot: Public<Bal
 }
 ```
 
-`Path` is 03's, line for line: a leaf's index and its 20 siblings, folded with `cond_swap` and
-`hash2`.
+`Path` is 03's, line for line: a leaf's index and its 20 siblings, folded with `xark-merkle`'s
+Poseidon2 `merkle_root` (a `cond_swap` and a `hash2` per level). An authority in Rust builds the
+list with the crate's `list()`, a `xark_merkle::tree::Tree`.
 
 - **Private:** the `Identity`, and the `Path` to its commitment: the 20 siblings and the leaf's
   index. The index says which voter this is, so it never leaves the voter's device.
@@ -98,7 +99,7 @@ the choice itself. The packing makes it free: `options` shares a public input wi
 
 ## The scoped nullifier
 
-The nullifier is `hash2(nullifier_key, poll)`, the voter's secret and the poll's public ID.
+The nullifier is `nullifier([nullifier_key, poll])`, the voter's secret and the poll's public ID.
 
 - **One vote per poll.** In one poll, a voter's nullifier is always the same: a second vote, with a
   fresh proof, reveals the same nullifier, and the program finds its receipt.
@@ -188,7 +189,7 @@ also check that each account check refuses what it should.
 
 ```bash
 xark build     # the circuit, its clients (Rust verifier crate, TypeScript), then the program
-xark test      # the circuit's tests (the builder against the whole tree, who votes, what's
+xark test      # the circuit's tests (the builder against the Tree, who votes, what's
                # refused), the program's, then prove and vote onchain through a relayer (LiteSVM)
 ```
 

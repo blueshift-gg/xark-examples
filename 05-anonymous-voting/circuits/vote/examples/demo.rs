@@ -2,7 +2,7 @@
 //! crate's self-test vector (`proof.bin`, `public_inputs.bin`, as `xark prove`
 //! writes them), which `xark build` bundles into `clients/vote/rust`. Run it after a
 //! new `xark setup`: `cargo run --release -p vote --example demo`.
-use vote::{Ballot, Identity, Path, VoteInputs};
+use vote::{Ballot, Identity, Path, VoteInputs, list};
 use xark::Field;
 
 fn main() {
@@ -10,7 +10,9 @@ fn main() {
         nullifier_key: Field::from(1u64),
         trapdoor: Field::from(2u64),
     };
-    let path = Path::first();
+    let mut tree = list();
+    let index = tree.push(identity.commitment());
+    let path: Path = tree.path(index).into();
     let inputs = VoteInputs {
         identity,
         path,

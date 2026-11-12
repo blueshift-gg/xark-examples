@@ -16,7 +16,9 @@ pub struct Append {
 
 #[input]
 impl Append {
-    /// `leaf` appended at `path`, the next free leaf's path.
+    /// `leaf` appended at `path`, the next free leaf's path: what the circuit
+    /// proves, computed on the host.
+    #[cfg(not(xark))]
     pub fn of(path: Path, leaf: Field) -> Append {
         Append {
             old_root: path.tree_root(),
@@ -27,12 +29,15 @@ impl Append {
     }
 }
 
-/// `path` is the next free leaf's. Only the tree's true nodes reproduce the
-/// program's root (Poseidon's collision resistance), so the path is the true path,
+/// `path` is the next free leaf's, at the program's next index. `merkle_append`
+/// proves its slot holds the empty leaf under the program's root and returns the
+/// root with `leaf` written there: only the tree's true nodes reproduce the
+/// program's root (Poseidon2's collision resistance), so the path is the true path,
 /// and `new_root` is the program's tree with `leaf` in the next slot.
 #[circuit]
 pub fn shielded_pool_deposit(path: Private<Path>, append: Public<Append>) {
-    require_eq(Append::of(path, append.leaf), append);
+    require(path.index == append.index);
+    require_eq(path.append(append.old_root, append.leaf), append.new_root);
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@
 // --inputs` does.
 
 import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type FieldInput, type Json, type Proof, type Prover, type U32, type U64, type Verifier } from "@blueshift-gg/xark/client";
+import type { Address } from "@solana/kit";
 export { CheckFailed, Field, InputError, fromHex, toHex };
 
 // The circuit's schema.json.
@@ -85,6 +86,26 @@ const schema = {
     "tx.memos[1].lo"
   ],
   "types": {
+    "Address": {
+      "encoding": {
+        "base58": true,
+        "bytes": 32,
+        "concat": [
+          16,
+          16
+        ]
+      },
+      "struct": [
+        {
+          "name": "hi",
+          "type": "field"
+        },
+        {
+          "name": "lo",
+          "type": "field"
+        }
+      ]
+    },
     "Flow": {
       "struct": [
         {
@@ -120,13 +141,13 @@ const schema = {
         {
           "name": "recipient",
           "type": {
-            "ref": "Hash"
+            "ref": "Address"
           }
         },
         {
           "name": "relayer",
           "type": {
-            "ref": "Hash"
+            "ref": "Address"
           }
         }
       ]
@@ -232,7 +253,7 @@ const schema = {
         {
           "name": "asset",
           "type": {
-            "ref": "Hash"
+            "ref": "Address"
           }
         },
         {
@@ -296,10 +317,10 @@ export interface Flow {
   vpubIn: U64;
   vpubOut: U64;
   fee: U64;
-  /** `Hash`: its 32 bytes. */
-  recipient: Uint8Array;
-  /** `Hash`: its 32 bytes. */
-  relayer: Uint8Array;
+  /** A Solana address (base58), or its 32 bytes. */
+  recipient: Address | Uint8Array;
+  /** A Solana address (base58), or its 32 bytes. */
+  relayer: Address | Uint8Array;
 }
 
 /** A `Key` (an input struct). */
@@ -333,8 +354,8 @@ export interface Spend {
 /** A `Transaction` (an input struct). */
 export interface Transaction {
   root: FieldInput;
-  /** `Hash`: its 32 bytes. */
-  asset: Uint8Array;
+  /** A Solana address (base58), or its 32 bytes. */
+  asset: Address | Uint8Array;
   nullifiers: readonly [FieldInput, FieldInput];
   commitments: readonly [FieldInput, FieldInput];
   oldRoot: FieldInput;
@@ -407,7 +428,7 @@ export class PathValue {
 /** A `Transaction`, decoded. */
 export interface TransactionValue {
   root: Field;
-  asset: Uint8Array;
+  asset: Address;
   nullifiers: [Field, Field];
   commitments: [Field, Field];
   oldRoot: Field;
@@ -422,8 +443,8 @@ export interface FlowValue {
   vpubIn: bigint;
   vpubOut: bigint;
   fee: bigint;
-  recipient: Uint8Array;
-  relayer: Uint8Array;
+  recipient: Address;
+  relayer: Address;
 }
 
 /** The public inputs, decoded from a proof. */
@@ -458,7 +479,7 @@ export const ShieldedTransact = new Circuit<ShieldedTransactInputs, ShieldedTran
   schema,
   decodePublic,
   client: true,
-  digest: "aa2e05477c68d7d50002397448d32796",
+  digest: "2ce642c480be4eed43d645284cb52fdb",
 });
 
 export type ShieldedTransactProver = Prover<ShieldedTransactInputs, ShieldedTransactPublicInputs, ShieldedTransactPublicValues, ShieldedTransactStructs>;
@@ -494,13 +515,13 @@ export const Note = {
    * What spending the note at `position` reveals: only `key`'s holder can make
    * it, and it's the same each time, so the program refuses a second spend.
    */
-  nullifier(note: Note, key: Key, asset: Uint8Array, position: U32): Field {
+  nullifier(note: Note, key: Key, asset: Address | Uint8Array, position: U32): Field {
     return new Field(ShieldedTransact.call<Json<Field>>("Note.nullifier", [note, key, asset, position]));
   },
   /**
    * The leaf the note is in the tree as, in the pool of `asset` (its mint).
    */
-  commitment(note: Note, asset: Uint8Array): Field {
+  commitment(note: Note, asset: Address | Uint8Array): Field {
     return new Field(ShieldedTransact.call<Json<Field>>("Note.commitment", [note, asset]));
   },
 };
@@ -511,7 +532,7 @@ export const Transaction = {
    * `key` spends `spends` and creates `outputs`, appended at `tip` (the next free
    * leaf's path) in the pool of `asset`.
    */
-  of(key: Key, spends: readonly [Spend, Spend], outputs: readonly [Note, Note], tip: Path, asset: Uint8Array, flow: Flow, memos: readonly [Uint8Array, Uint8Array]): TransactionValue {
+  of(key: Key, spends: readonly [Spend, Spend], outputs: readonly [Note, Note], tip: Path, asset: Address | Uint8Array, flow: Flow, memos: readonly [Uint8Array, Uint8Array]): TransactionValue {
     return decodeTransaction(ShieldedTransact.call<Json<TransactionValue>>("Transaction.of", [key, spends, outputs, tip, asset, flow, memos]));
   },
 };
@@ -570,7 +591,7 @@ function decodePath(v: Json<PathValue>): PathValue {
 function decodeTransaction(v: Json<TransactionValue>): TransactionValue {
   return {
     root: new Field(v.root),
-    asset: fromHex(v.asset),
+    asset: v.asset,
     nullifiers: [new Field(v.nullifiers[0]), new Field(v.nullifiers[1])],
     commitments: [new Field(v.commitments[0]), new Field(v.commitments[1])],
     oldRoot: new Field(v.oldRoot),
@@ -586,7 +607,7 @@ function decodeFlow(v: Json<FlowValue>): FlowValue {
     vpubIn: BigInt(v.vpubIn),
     vpubOut: BigInt(v.vpubOut),
     fee: BigInt(v.fee),
-    recipient: fromHex(v.recipient),
-    relayer: fromHex(v.relayer),
+    recipient: v.recipient,
+    relayer: v.relayer,
   };
 }

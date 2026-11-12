@@ -18,17 +18,20 @@
 //! note and owners trial-decrypt. Each memo's hash is a public input, so a submitter
 //! can't swap a memo without breaking the proof.
 //!
+//! A note's commitment and nullifier are Poseidon2's `commit` and `nullifier`, each
+//! in a domain of its own; the keys are its `hash`, with a tag apiece.
+//!
 //! The public inputs are one [`Transaction`].
-use pool::{Hash, Path, bind, halves};
+use pool::Path;
 use xark::prelude::*;
-use xark_poseidon2::hash;
+use xark_hash::Hash;
+use xark_poseidon2::{commit, hash};
 
-// Domain tags, on top of each hash's length tag: no two kinds of value collide.
+// The keys' tags, on top of `hash`'s length tag: no two kinds of key collide, and
+// `hash` is a domain apart from `commit`'s and `nullifier`'s.
 const NULLIFIER_KEY: u64 = 1;
 const VIEWING_KEY: u64 = 2;
 const ADDRESS: u64 = 3;
-const COMMITMENT: u64 = 4;
-const NULLIFIER: u64 = 5;
 
 /// A holder's spending key: their other keys and every address derive from it.
 #[input]
@@ -68,26 +71,21 @@ pub struct Note {
 #[input]
 impl Note {
     /// The leaf the note is in the tree as, in the pool of `asset` (its mint).
-    pub fn commitment(&self, asset: Hash) -> Field {
-        let [hi, lo] = halves(asset);
+    pub fn commitment(&self, asset: Address) -> Field {
+        let [hi, lo] = asset.to_fields();
         let [value, owner, rho, rseed] = self.to_fields();
-        hash([value, owner, rho, rseed, hi, lo, Field::from(COMMITMENT)])
+        commit([value, owner, rho, rseed, hi, lo])
     }
 
     /// What spending the note at `position` reveals: only `key`'s holder can make
     /// it, and it's the same each time, so the program refuses a second spend.
-    pub fn nullifier(&self, key: Key, asset: Hash, position: u32) -> Field {
+    pub fn nullifier(&self, key: Key, asset: Address, position: u32) -> Field {
         nullifier(key.nullifier_key(), self.commitment(asset), position)
     }
 }
 
 fn nullifier(nullifier_key: Field, commitment: Field, position: u32) -> Field {
-    hash([
-        nullifier_key,
-        commitment,
-        Field::from(position),
-        Field::from(NULLIFIER),
-    ])
+    xark_poseidon2::nullifier([nullifier_key, commitment, Field::from(position)])
 }
 
 /// A note to spend, at `path`, owned by the spender's address number
@@ -109,8 +107,8 @@ pub struct Flow {
     pub vpub_in: u64,
     pub vpub_out: u64,
     pub fee: u64,
-    pub recipient: Hash,
-    pub relayer: Hash,
+    pub recipient: Address,
+    pub relayer: Address,
 }
 
 /// What the program checks a transaction against, the public inputs in this order:
@@ -120,7 +118,7 @@ pub struct Flow {
 #[input]
 pub struct Transaction {
     pub root: Field,
-    pub asset: Hash,
+    pub asset: Address,
     pub nullifiers: [Field; 2],
     pub commitments: [Field; 2],
     pub old_root: Field,
@@ -140,7 +138,7 @@ impl Transaction {
         spends: [Spend; 2],
         outputs: [Note; 2],
         tip: Path,
-        asset: Hash,
+        asset: Address,
         flow: Flow,
         memos: [Hash; 2],
     ) -> Transaction {
@@ -151,24 +149,12 @@ impl Transaction {
             nullifiers: spends.map(|s| s.note.nullifier(key, asset, s.path.index)),
             commitments,
             old_root: tip.tree_root(),
-            new_root: pair_root(tip, commitments),
+            new_root: tip.next(commitments[0]).next(commitments[1]).tree_root(),
             index: tip.index,
             flow,
             memos,
         }
     }
-}
-
-/// The root once `pair` is appended at `tip`, the next free leaf's path, at an even
-/// index: the second leaf's path is `tip` with the first beside it.
-fn pair_root(tip: Path, pair: [Field; 2]) -> Field {
-    let mut siblings = tip.siblings;
-    siblings[0] = pair[0];
-    let second = Path {
-        index: tip.index + 1,
-        siblings,
-    };
-    second.root(pair[1])
 }
 
 /// `tip` is the next free leaf's path: the outputs land there and after it.
@@ -209,12 +195,10 @@ pub fn shielded_transact(
     // Every value is a range-checked `u64`, so these few sums can't wrap the field.
     require_eq(value_in, value_out);
 
-    // Append the pair at `index`, an even slot. As in 04's deposit, the old root
-    // pins `tip` to the tree's true nodes.
+    // Append the pair at `index`, an even slot whose pair was empty. As in 04's
+    // deposit, the old root pins `tip` to the tree's true nodes.
     require(tip.index == tx.index);
-    require(tx.index.is_multiple_of(2));
-    require_eq(tip.tree_root(), tx.old_root);
-    require_eq(pair_root(tip, tx.commitments), tx.new_root);
+    require_eq(tip.append_pair(tx.old_root, tx.commitments), tx.new_root);
 
     // Where the value and the fee go, and the memos, are the ones the proof was made for.
     bind(tx.flow.recipient);
@@ -229,7 +213,7 @@ mod tests {
     use super::*;
     use xark::prover::ProveError;
 
-    fn asset() -> Hash {
+    fn asset() -> Address {
         [7; 32].into()
     }
 
@@ -274,13 +258,9 @@ mod tests {
             relayer: [8; 32].into(),
         };
         let memos = [[1; 32].into(), [2; 32].into()];
+        // `Transaction::of` appends the pair as the wallet does (`next`, twice), so
+        // a proof that holds is the circuit's `append_pair` agreeing with it.
         let tx = Transaction::of(key, spends, outputs, tip, asset(), flow, memos);
-        // At an even index, the only kind the circuit takes, the circuit's pair
-        // append agrees with the wallet's.
-        if tip.index.is_multiple_of(2) {
-            let [first, second] = tx.commitments;
-            assert_eq!(tx.new_root, tip.next(first).next(second).tree_root());
-        }
         shielded_transact(key, spends, outputs, tip, tx)
     }
 

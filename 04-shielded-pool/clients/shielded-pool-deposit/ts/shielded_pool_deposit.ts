@@ -193,7 +193,7 @@ export const ShieldedPoolDeposit = new Circuit<ShieldedPoolDepositInputs, Shield
   schema,
   decodePublic,
   client: true,
-  digest: "d43e8c0d55297486007612c4e210a6cc",
+  digest: "2962ed49a86703e83e8573330d6fc0e8",
 });
 
 export type ShieldedPoolDepositProver = Prover<ShieldedPoolDepositInputs, ShieldedPoolDepositPublicInputs, ShieldedPoolDepositPublicValues, ShieldedPoolDepositStructs>;
@@ -203,7 +203,8 @@ export type ShieldedPoolDepositProof = Proof<ShieldedPoolDepositPublicValues>;
 /** `Append`'s Rust functions (`#[input] impl Append`), run from `client.wasm`. */
 export const Append = {
   /**
-   * `leaf` appended at `path`, the next free leaf's path.
+   * `leaf` appended at `path`, the next free leaf's path: what the circuit
+   * proves, computed on the host.
    */
   of(path: Path, leaf: FieldInput): AppendValue {
     return decodeAppend(ShieldedPoolDeposit.call<Json<AppendValue>>("Append.of", [path, leaf]));

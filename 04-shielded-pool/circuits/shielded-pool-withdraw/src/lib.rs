@@ -1,9 +1,9 @@
 //! Shielded pool: the WITHDRAW circuit. Proves the note behind some leaf of the
 //! tree rooted at `root` is yours, without saying which leaf, and reveals its
 //! `nullifier_hash` so the program can refuse a second withdrawal of it.
-use pool::{Hash, Path, bind};
+use pool::Path;
 use xark::prelude::*;
-use xark_poseidon2::hash;
+use xark_poseidon2::{commit, nullifier};
 
 /// A deposit's secret: whoever knows it can withdraw the deposit, once.
 #[input]
@@ -14,15 +14,16 @@ pub struct Note {
 
 #[input]
 impl Note {
-    /// The leaf a deposit appends: it hides both secrets.
+    /// The leaf a deposit appends, `commit(nullifier, secret)`: it hides both
+    /// secrets.
     pub fn commitment(&self) -> Field {
-        hash(self.to_fields())
+        commit(self.to_fields())
     }
 
-    /// What a withdrawal reveals: the same for every withdrawal of this note, and
-    /// unlinkable to its commitment without the secret.
+    /// What a withdrawal reveals, `nullifier(nullifier)`: the same for every
+    /// withdrawal of this note, and unlinkable to its commitment without the secret.
     pub fn nullifier_hash(&self) -> Field {
-        hash([self.nullifier])
+        nullifier([self.nullifier])
     }
 }
 
@@ -33,15 +34,21 @@ impl Note {
 pub struct Withdrawal {
     pub root: Field,
     pub nullifier_hash: Field,
-    pub recipient: Hash,
-    pub relayer: Hash,
+    pub recipient: Address,
+    pub relayer: Address,
     pub fee: u64,
 }
 
 #[input]
 impl Withdrawal {
     /// Withdrawing `note`, at `path`, to `recipient`, paying `fee` to `relayer`.
-    pub fn of(note: Note, path: Path, recipient: Hash, relayer: Hash, fee: u64) -> Withdrawal {
+    pub fn of(
+        note: Note,
+        path: Path,
+        recipient: Address,
+        relayer: Address,
+        fee: u64,
+    ) -> Withdrawal {
         Withdrawal {
             root: path.root(note.commitment()),
             nullifier_hash: note.nullifier_hash(),

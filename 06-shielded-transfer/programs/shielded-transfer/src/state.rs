@@ -14,8 +14,8 @@ pub const NULLIFIER_SEED: &[u8] = b"nullifier";
 /// The empty tree's root, little-endian: the first transaction's `old_root`. The
 /// client tests check it against the circuit's `Path.first().treeRoot()`.
 pub const EMPTY_ROOT: [u8; 32] = [
-    26, 122, 47, 146, 164, 115, 191, 166, 88, 234, 28, 252, 38, 169, 221, 171, 246, 159, 204, 103,
-    2, 229, 199, 103, 212, 104, 254, 41, 151, 59, 127, 46,
+    251, 142, 67, 247, 199, 111, 241, 124, 245, 96, 180, 214, 179, 51, 248, 149, 20, 177, 173, 83,
+    193, 126, 124, 38, 168, 0, 139, 11, 55, 225, 46, 3,
 ];
 
 /// A spent nullifier is a program-owned account at its PDA holding no data: its

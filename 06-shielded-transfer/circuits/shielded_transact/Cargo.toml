@@ -9,8 +9,9 @@ publish = false
 
 [dependencies]
 xark = "0.4"
+xark-hash = "0.4"
 xark-poseidon2 = "0.4"
-# 04's tree and addresses, as an ordinary crate: the same tree, hash and zeros.
+# 04's tree, as an ordinary crate: the same tree, hash and empty leaf.
 pool = { path = "../../../04-shielded-pool/circuits/pool" }
 
 [lints.rust]

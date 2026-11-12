@@ -16,12 +16,14 @@ same denomination; [06](../06-shielded-transfer/) is where range proofs become e
 
 ## How it works
 
-Every deposit appends a **note commitment**, `Poseidon2(nullifier, secret)`, as a leaf of a Merkle
+Every deposit appends a **note commitment**, `commit(nullifier, secret)`, as a leaf of a Merkle
 tree. To withdraw, you prove in zero knowledge that:
 
 1. **membership**: your commitment is *some* leaf in the tree, without revealing which; and
-2. **no double-withdraw**: you reveal `nullifier_hash = Poseidon2(nullifier)`, a value only the
+2. **no double-withdraw**: you reveal `nullifier_hash = nullifier(nullifier)`, a value only the
    note's owner can produce, which the pool records so that note can never be spent twice.
+
+`commit` and `nullifier` are `xark-poseidon2`'s: the Poseidon2 sponge, each in a domain of its own.
 
 Unlinkability comes from (1): you prove you own *a* leaf, not *which* leaf, so the withdrawal can't
 be tied to any particular deposit. Your anonymity set is every deposit in the tree, which is why a
@@ -29,8 +31,8 @@ mixer is only as private as it is used.
 
 ### The chain never hashes
 
-A shielded pool is a Merkle tree, and the classic trap is that the Poseidon in your circuit and the
-Poseidon onchain must be **byte-for-byte identical** or the roots never match. Instead of
+A shielded pool is a Merkle tree, and the classic trap is that the hash in your circuit and the
+hash onchain must be **byte-for-byte identical** or the roots never match. Instead of
 reimplementing the hash in a Solana program, all hashing stays in the circuits:
 
 - **`deposit`** ([`shielded-pool-deposit`](./circuits/shielded-pool-deposit/src/lib.rs)) proves *"`new_root` is the tree rooted at `old_root` with `leaf` appended at
@@ -39,7 +41,7 @@ reimplementing the hash in a Solana program, all hashing stays in the circuits:
   `root, nullifier_hash, recipient, relayer, fee`.
 
 The program stores only a ring of recent roots, the next index, and one marker account per spent
-nullifier. It verifies proofs and moves lamports: no Poseidon onchain, and circuit/chain agreement
+nullifier. It verifies proofs and moves lamports: no hashing onchain, and circuit/chain agreement
 holds *by construction*.
 
 ### One type for the whole tree: `Path`
@@ -54,7 +56,7 @@ pub struct Append { pub old_root: Field, pub new_root: Field, pub leaf: Field, p
 
 #[input]
 impl Append {
-    /// `leaf` appended at `path`, the next free leaf's path.
+    /// `leaf` appended at `path`, the next free leaf's path (on the host).
     pub fn of(path: Path, leaf: Field) -> Append {
         Append { old_root: path.tree_root(), new_root: path.root(leaf), leaf, index: path.index }
     }
@@ -62,18 +64,21 @@ impl Append {
 
 #[circuit]
 pub fn shielded_pool_deposit(path: Private<Path>, append: Public<Append>) {
-    require_eq(Append::of(path, append.leaf), append);
+    require(path.index == append.index);
+    require_eq(path.append(append.old_root, append.leaf), append.new_root);
 }
 ```
 
-Only the tree's true nodes reproduce `old_root` (the hash's collision resistance), so the depositor
-can't smuggle in a different tree. A withdrawal proves your note's own `Path` against a root the
+`path.append` is `xark-merkle`'s `merkle_append`: one path proves the slot holds the empty leaf
+under `old_root`, and gives the root with `leaf` written there. Only the tree's true nodes reproduce
+`old_root` (the hash's collision resistance), so the depositor can't smuggle in a different tree. A withdrawal proves your note's own `Path` against a root the
 program remembers; its public statement is a `Withdrawal`. Each circuit's public inputs are one
 `#[input]` struct, so the program's input order is a type, and the wallet builds it with the
 circuit's own `Append::of` and `Withdrawal::of`.
 
-Every root a circuit computes is `xark-merkle`'s `merkle_root`, whose fold is formally verified
-(Lean, in xark). `Path` adds what a wallet needs around it.
+The tree is `xark-merkle`'s Poseidon2 tree (`xark_merkle::poseidon2`): every root a circuit computes
+is its `merkle_root`, and every append its `merkle_append`, each level a `cond_swap` formally
+verified in Lean (in xark) and a Poseidon2 `hash2`. `Path` adds what a wallet needs around them.
 
 `Path` lives in [`circuits/pool`](./circuits/pool/src/lib.rs), an ordinary Rust crate both circuits
 import (and [06](../06-shielded-transfer/) reuses). Its `#[input] impl` puts the same code in the
@@ -89,19 +94,21 @@ withdrawals.prove({ note, path: mine, withdrawal: Withdrawal.of(note, mine, reci
 ```
 
 `first`, `next` and `update` are host-only Rust (`#[cfg(not(xark))]`), and their tests check every
-step against a tree hashed from scratch. The empty subtrees they need are hashed on the host; the
-circuits never need them.
+step against `xark_merkle::tree`'s builder (`pool::tree()`, which a host holding every note uses
+instead). The empty subtrees they need are hashed on the host; the circuits never need them.
 
-**Hash domains.** Tree nodes are Poseidon (`xark-merkle`'s); commitments and nullifier hashes are
-Poseidon2, a different permutation, whose sponge also seeds its capacity with the input length (2
-and 1). No node, commitment or nullifier hash can collide with another kind.
+**Hash domains.** Tree nodes are Poseidon2's 2-to-1 compression `hash2`, its capacity at 0;
+commitments and nullifier hashes are its sponge in `commit`'s and `nullifier`'s domains, whose
+capacity starts at `2^64 · 1 + 2` and `2^64 · 2 + 1` (the domain, then the input's length). No
+node, commitment or nullifier hash can collide with another kind.
 
 **Front-run protection.** `recipient`, `relayer` and `fee` are public inputs the program fills from
 the transaction, so a relayer can't rewrite where your withdrawal goes. A Solana address is wider
-than the BN254 field, so it enters as xark's `Hash` type, two 16-byte halves; the client takes its
-32 bytes. One subtlety: Groth16 binds a public input only through the constraints that use it, and
-`xark build` refuses one that none use. `fee` is a `u64`, so its range check on entry already uses
-it; the two addresses get one constraint per half (`pool::bind`, Tornado's `recipientSquare`).
+than the BN254 field, so it enters as xark's `Address`, two 16-byte halves; the client takes it as
+@solana/kit's `Address`. One subtlety: Groth16 binds a public input only through the constraints
+that use it, and `xark build` refuses one that none use. `fee` is a `u64`, so its range check on
+entry already uses it; the two addresses get one constraint per half (xark's `bind`, Tornado's
+`recipientSquare`).
 
 **Multi-denomination.** Each denomination is its own pool: `initialize(denomination)` creates a PDA
 seeded by the amount, like Tornado's separate 0.1 / 1 / 10 pools. One program serves every size, and
@@ -112,7 +119,7 @@ it has identical value; arbitrary hidden amounts need value-carrying notes, whic
 ## Anatomy
 
 ```
-circuits/pool/                    Path (the tree, for circuits and wallets), bind: shared with 06
+circuits/pool/                    Path (the tree, for circuits and wallets): shared with 06
 circuits/shielded-pool-deposit/   proves a tree append                (public: Append)
 circuits/shielded-pool-withdraw/  proves membership + nullifier, and  (public: Withdrawal)
                                   Note's commitment and nullifier hash
@@ -254,7 +261,7 @@ The pool's layout, every field little-endian:
 | 24 | 512 | `roots: [[u8; 32]; 16]`, the recent-root ring |
 
 A nullifier's account is one byte, its tag, `2`; that it exists is what counts. An address enters
-the circuit as a `Hash`, `[hi, lo]`: each 16-byte half read as a big-endian integer, as a
+the circuit as an `Address`, `[hi, lo]`: each 16-byte half read as a big-endian integer, as a
 little-endian field element. The generated `PublicInputs` does that split.
 
 ### Errors

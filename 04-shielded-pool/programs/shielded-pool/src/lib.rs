@@ -1,6 +1,6 @@
 //! Shielded pool: the onchain half (Pinocchio).
 //!
-//! The program never hashes a tree node. All Poseidon lives in the circuits; the
+//! The program never hashes a tree node. All Poseidon2 lives in the circuits; the
 //! chain keeps only what consensus needs (a ring of recent Merkle roots, the next
 //! leaf index, and one marker account per spent nullifier) and verifies two proofs
 //! with the crates `xark build` generates (`clients/*/rust`):

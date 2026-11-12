@@ -13,8 +13,8 @@ pub const NULLIFIER_SEED: &[u8] = b"nullifier";
 // the circuit's `Path.first().treeRoot()`, and the host tests against the deposit
 // demo's `old_root`.
 pub const EMPTY_ROOT: [u8; 32] = [
-    26, 122, 47, 146, 164, 115, 191, 166, 88, 234, 28, 252, 38, 169, 221, 171, 246, 159, 204, 103,
-    2, 229, 199, 103, 212, 104, 254, 41, 151, 59, 127, 46,
+    251, 142, 67, 247, 199, 111, 241, 124, 245, 96, 180, 214, 179, 51, 248, 149, 20, 177, 173, 83,
+    193, 126, 124, 38, 168, 0, 139, 11, 55, 225, 46, 3,
 ];
 
 /// A pool's account, 536 bytes. Every field is a byte array, so the struct has

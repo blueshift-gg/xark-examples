@@ -43,12 +43,12 @@ The circuit's inputs are its domain, as Rust types the TypeScript client gets as
 #[input] pub struct Key { pub secret: Field }
 #[input] pub struct Note { pub value: u64, pub owner: Field, pub rho: Field, pub rseed: Field }
 #[input] pub struct Spend { pub note: Note, pub diversifier: Field, pub path: Path, pub real: bool }
-#[input] pub struct Flow { pub vpub_in: u64, pub vpub_out: u64, pub fee: u64, pub recipient: Hash, pub relayer: Hash }
+#[input] pub struct Flow { pub vpub_in: u64, pub vpub_out: u64, pub fee: u64, pub recipient: Address, pub relayer: Address }
 
 /// What the program checks a transaction against: the public inputs, in this order.
 #[input]
 pub struct Transaction {
-    pub root: Field, pub asset: Hash, pub nullifiers: [Field; 2], pub commitments: [Field; 2],
+    pub root: Field, pub asset: Address, pub nullifiers: [Field; 2], pub commitments: [Field; 2],
     pub old_root: Field, pub new_root: Field, pub index: u32, pub flow: Flow, pub memos: [Hash; 2],
 }
 
@@ -60,11 +60,15 @@ pub fn shielded_transact(key: Private<Key>, spends: Private<[Spend; 2]>, outputs
 - **Keys (Sapling-lite).** `Key::nullifier_key` and `Key::viewing_key` derive from the secret;
   `Key::address(diversifier)` from the viewing key, as many unlinkable addresses as the holder
   likes. Spending needs the secret; recognizing your addresses needs only the viewing key.
-- **Notes.** `Note::commitment(asset)` hashes every field with the pool's mint, so notes are
-  per-token. `rho` and `rseed` keep otherwise-identical notes distinct and hidden.
-- **Nullifiers.** `Note::nullifier(key, asset, position)` binds the spender's key, the note *and*
-  its position in the tree: one nullifier per note (revealed once, so no double spend), unlinkable
-  to the commitment without the key.
+- **Notes.** `Note::commitment(asset)` is `commit` over every field and the pool's mint, so notes
+  are per-token. `rho` and `rseed` keep otherwise-identical notes distinct and hidden.
+- **Nullifiers.** `Note::nullifier(key, asset, position)` is `nullifier` over the spender's
+  nullifier key, the note's commitment *and* its position in the tree: one nullifier per note
+  (revealed once, so no double spend), unlinkable to the commitment without the key.
+
+`commit` and `nullifier` are `xark-poseidon2`'s: the Poseidon2 sponge, each in a domain of its own,
+so a commitment, a nullifier and a tree node can't stand in for one another. The keys are its plain
+`hash`, each with a tag of its own.
 
 Each is `#[input] impl` Rust that the circuit uses and the client calls, so the wallet computes
 commitments, addresses and nullifiers with the code the proof checks: `Key.address(key, d)`,
@@ -78,14 +82,16 @@ In one proof: each real spend is in the tree at a remembered `root`, owned by th
 commitment revealed; value is conserved; and, 04's trick again, the two outputs are appended
 (`old_root → new_root`) so the chain never hashes. Every value is a `u64` input, range-checked on
 entry, so no sum can wrap the field. The program always appends notes in pairs at an even slot, so
-the second output's path is the first's with the first beside it: two `xark-merkle` roots, before
-and after, prove the whole append.
+the pair is one leaf of the tree of pairs, the height-1 subtrees: `Path::append_pair` is
+`xark-merkle`'s `merkle_append` on the path's upper 19 levels, proving the pair's subtree was empty
+under `old_root` and giving `new_root` with the two notes in it.
 
 The public inputs are one `Transaction`: 19 field elements, `root, asset (hi, lo), nullifiers[2],
 commitments[2], old_root, new_root, index, flow, recipient (hi, lo), relayer (hi, lo), memos[2]
 (hi, lo each)`. `flow` is `Flow`'s three `u64`s packed into one element, as xark packs a struct's
-narrow fields: `vpub_in + vpub_out·2⁶⁴ + fee·2¹²⁸`. Addresses (the mint, the token accounts) and memo hashes are all
-32 bytes, which the circuit takes as xark's `Hash`. The circuit imports 04's `pool` crate for `Path`;
+narrow fields: `vpub_in + vpub_out·2⁶⁴ + fee·2¹²⁸`. Addresses (the mint, the token accounts) are
+xark's `Address` and memo hashes xark's `Hash`, each 32 bytes in two 16-byte halves; the client
+takes the addresses as @solana/kit's `Address`. The circuit imports 04's `pool` crate for `Path`;
 `xark profile` attributes every constraint to a source line.
 
 The program never packs those elements itself. `xark build` generates the verifier crate
@@ -98,7 +104,7 @@ use shielded_transact_verifier::{Flow, PublicInputs, Transaction, verify};
 let inputs = PublicInputs {
     tx: Transaction {
         root: *data.root,
-        asset: pool.mint,                        // a `Hash`: split into (hi, lo) for you
+        asset: pool.mint,                        // an `Address`: split into (hi, lo) for you
         nullifiers: data.nf.map(|nf| *nf),
         commitments: data.cm_out.map(|cm| *cm),
         old_root: *pool.current_root(),

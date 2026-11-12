@@ -130,9 +130,9 @@ async function prepare(p: Pool, key: Key, spends: [Spend, Spend], outputs: [Outp
   const tip = p.tip;
   const memos = outputs.map(() => crypto.getRandomValues(new Uint8Array(48))); // each note, encrypted to its owner
   // The statement the program checks, from the circuit's own Rust.
-  const flow = { vpubIn, vpubOut, fee, recipient: bytes(moves.recipient ?? program), relayer: bytes(moves.relayerToken ?? program) };
+  const flow = { vpubIn, vpubOut, fee, recipient: moves.recipient ?? program, relayer: moves.relayerToken ?? program };
   const notes = [outputs[0].note, outputs[1].note] as const;
-  const tx = Transaction.of(key, spends, notes, tip, bytes(p.mint), flow, [sha256(memos[0]), sha256(memos[1])]);
+  const tx = Transaction.of(key, spends, notes, tip, p.mint, flow, [sha256(memos[0]), sha256(memos[1])]);
   const proof = prover.prove({ key, spends, outputs: notes, tip, tx });
   const [n0, n1] = await Promise.all(tx.nullifiers.map((n) => getProgramDerivedAddress({ programAddress: program, seeds: ["nullifier", bytes(p.mint), n.toBytes()] })));
   const optional = (a?: Address) => (a ? writable(a) : readonly(program));

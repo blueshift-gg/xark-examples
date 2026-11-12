@@ -11,6 +11,7 @@
 // --inputs` does.
 
 import { CheckFailed, Circuit, Field, InputError, fromHex, toHex, type FieldInput, type Json, type Proof, type Prover, type U32, type U64, type Verifier } from "@blueshift-gg/xark/client";
+import type { Address } from "@solana/kit";
 export { CheckFailed, Field, InputError, fromHex, toHex };
 
 // The circuit's schema.json.
@@ -49,8 +50,9 @@ const schema = {
     "withdrawal.fee"
   ],
   "types": {
-    "Hash": {
+    "Address": {
       "encoding": {
+        "base58": true,
         "bytes": 32,
         "concat": [
           16,
@@ -112,13 +114,13 @@ const schema = {
         {
           "name": "recipient",
           "type": {
-            "ref": "Hash"
+            "ref": "Address"
           }
         },
         {
           "name": "relayer",
           "type": {
-            "ref": "Hash"
+            "ref": "Address"
           }
         },
         {
@@ -151,10 +153,10 @@ export interface Path {
 export interface Withdrawal {
   root: FieldInput;
   nullifierHash: FieldInput;
-  /** `Hash`: its 32 bytes. */
-  recipient: Uint8Array;
-  /** `Hash`: its 32 bytes. */
-  relayer: Uint8Array;
+  /** A Solana address (base58), or its 32 bytes. */
+  recipient: Address | Uint8Array;
+  /** A Solana address (base58), or its 32 bytes. */
+  relayer: Address | Uint8Array;
   fee: U64;
 }
 
@@ -220,8 +222,8 @@ export class PathValue {
 export interface WithdrawalValue {
   root: Field;
   nullifierHash: Field;
-  recipient: Uint8Array;
-  relayer: Uint8Array;
+  recipient: Address;
+  relayer: Address;
   fee: bigint;
 }
 
@@ -254,7 +256,7 @@ export const ShieldedPoolWithdraw = new Circuit<ShieldedPoolWithdrawInputs, Shie
   schema,
   decodePublic,
   client: true,
-  digest: "5bfbf4d76ed90e8aa38b9bd0ea431e5d",
+  digest: "b1d2b197968f4fd0b53b2ca032655d70",
 });
 
 export type ShieldedPoolWithdrawProver = Prover<ShieldedPoolWithdrawInputs, ShieldedPoolWithdrawPublicInputs, ShieldedPoolWithdrawPublicValues, ShieldedPoolWithdrawStructs>;
@@ -266,7 +268,7 @@ export const Withdrawal = {
   /**
    * Withdrawing `note`, at `path`, to `recipient`, paying `fee` to `relayer`.
    */
-  of(note: Note, path: Path, recipient: Uint8Array, relayer: Uint8Array, fee: U64): WithdrawalValue {
+  of(note: Note, path: Path, recipient: Address | Uint8Array, relayer: Address | Uint8Array, fee: U64): WithdrawalValue {
     return decodeWithdrawal(ShieldedPoolWithdraw.call<Json<WithdrawalValue>>("Withdrawal.of", [note, path, recipient, relayer, fee]));
   },
 };
@@ -274,14 +276,15 @@ export const Withdrawal = {
 /** `Note`'s Rust functions (`#[input] impl Note`), run from `client.wasm`. */
 export const Note = {
   /**
-   * The leaf a deposit appends: it hides both secrets.
+   * The leaf a deposit appends, `commit(nullifier, secret)`: it hides both
+   * secrets.
    */
   commitment(note: Note): Field {
     return new Field(ShieldedPoolWithdraw.call<Json<Field>>("Note.commitment", [note]));
   },
   /**
-   * What a withdrawal reveals: the same for every withdrawal of this note, and
-   * unlinkable to its commitment without the secret.
+   * What a withdrawal reveals, `nullifier(nullifier)`: the same for every
+   * withdrawal of this note, and unlinkable to its commitment without the secret.
    */
   nullifierHash(note: Note): Field {
     return new Field(ShieldedPoolWithdraw.call<Json<Field>>("Note.nullifier_hash", [note]));
@@ -343,8 +346,8 @@ function decodeWithdrawal(v: Json<WithdrawalValue>): WithdrawalValue {
   return {
     root: new Field(v.root),
     nullifierHash: new Field(v.nullifierHash),
-    recipient: fromHex(v.recipient),
-    relayer: fromHex(v.relayer),
+    recipient: v.recipient,
+    relayer: v.relayer,
     fee: BigInt(v.fee),
   };
 }

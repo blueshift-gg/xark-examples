@@ -4,7 +4,6 @@
 import {
   AccountRole,
   address,
-  getAddressEncoder,
   getProgramDerivedAddress,
   type Address,
   type Instruction,
@@ -19,7 +18,6 @@ import { Field, Note, ShieldedPoolWithdraw, Withdrawal, type ShieldedPoolWithdra
 const program = address("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 const system = address("11111111111111111111111111111111");
 const DENOMINATION = 1_000_000_000n; // 1 SOL
-const bytes = (a: Address) => new Uint8Array(getAddressEncoder().encode(a));
 // The program's instruction tags (`programs/shielded-pool/src/lib.rs`).
 const INITIALIZE = 0;
 const DEPOSIT = 1;
@@ -105,7 +103,7 @@ test("deposit, others deposit, withdraw unlinkably through a relayer, once", asy
   const relayer = await funded(p.svm);
   const recipient = (await funded(p.svm, 0n)).address;
   const fee = 10_000_000n;
-  const statement = Withdrawal.of(mine, path, bytes(recipient), bytes(relayer.address), fee);
+  const statement = Withdrawal.of(mine, path, recipient, relayer.address, fee);
   expect(statement.root).toEqual(p.tip.treeRoot()); // the root the program has now
   const proof = withdrawals.prove({ note: mine, path, withdrawal: statement });
   const { root, nullifierHash } = statement;
@@ -131,9 +129,8 @@ test("a note that isn't in the tree has no proof", async () => {
   const p = await pool();
   await deposit(p, newNote());
   const stranger = newNote();
-  const zero = new Uint8Array(32);
   // Against the pool's root: a statement of the stranger's own would name a root no pool has.
-  const withdrawal = { ...Withdrawal.of(stranger, Path.first(), zero, zero, 0), root: p.tip.treeRoot() };
+  const withdrawal = { ...Withdrawal.of(stranger, Path.first(), system, system, 0), root: p.tip.treeRoot() };
   const prove = () => withdrawals.prove({ note: stranger, path: Path.first(), withdrawal });
   expect(prove).toThrow(/path\.root\(note\.commitment\(\)\)/);
 });

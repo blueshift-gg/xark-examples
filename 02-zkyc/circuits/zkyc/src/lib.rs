@@ -3,11 +3,10 @@
 //! without revealing it. The identity stays private; the commitment, the policy and
 //! the holder's wallet are public. Public inputs, in order: `commitment`, `policy`
 //! (two field elements: `today`, `born_by` and `min_net_worth` packed into one, then
-//! `allowed`), `holder` (two). The program builds `policy` from its clock and its own
-//! rules, and `holder` from the transaction's signer, so the verifier picks the
-//! rules, and a proof made by another wallet doesn't verify.
+//! `allowed`), `holder` (a Solana address, two). The program builds `policy` from its
+//! clock and its own rules, and `holder` from the transaction's signer, so the
+//! verifier picks the rules, and a proof made by another wallet doesn't verify.
 use xark::prelude::*;
-use xark_hash::Hash;
 
 /// A day this circuit's dates can be: 1900-01-01 to 2100-12-31, 17 bits.
 pub type Day = Days<1900, 2100>;
@@ -30,9 +29,11 @@ pub struct Identity {
 
 #[input]
 impl Identity {
-    /// The issuer's commitment: Poseidon2 over every field, so adding one extends it.
+    /// The issuer's commitment: Poseidon2's `commit` over every field, so adding one
+    /// extends it. It's in its own domain, so no other Poseidon2 hash of the same
+    /// fields is equal to it.
     pub fn commitment(&self) -> Field {
-        xark_poseidon2::hash(self.to_fields())
+        xark_poseidon2::commit(self.to_fields())
     }
 }
 
@@ -109,17 +110,16 @@ impl Policy {
 }
 
 /// `id` is the identity the issuer committed to as `commitment`, and it meets
-/// `policy`. `holder` is the wallet the proof is for: a Solana address, 32 bytes, as
-/// xark's `Hash`. Nothing else uses it, so `bind` ties the proof to it with one
-/// constraint per half (Tornado's `recipientSquare`): Groth16 checks a public input
-/// only through the constraints that use it. Without it, anyone who saw the proof
-/// could submit it as their own.
+/// `policy`. `holder` is the wallet the proof is for, a Solana address. Nothing else
+/// uses it, so `bind` ties the proof to it with one constraint per half (Tornado's
+/// `recipientSquare`): Groth16 checks a public input only through the constraints
+/// that use it. Without it, anyone who saw the proof could submit it as their own.
 #[circuit]
 pub fn zkyc(
     id: Private<Identity>,
     commitment: Public<Field>,
     policy: Public<Policy>,
-    holder: Public<Hash>,
+    holder: Public<Address>,
 ) {
     require_eq(id.commitment(), commitment);
     require(id.born <= policy.born_by);

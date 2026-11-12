@@ -15,8 +15,11 @@ An issuer (a KYC provider, a government portal) checks your documents once, comm
 found, and publishes only the result:
 
 ```
-commitment = Poseidon2(document, born ‖ nationality ‖ net_worth ‖ expires, salt)
+commitment = commit(document, born ‖ nationality ‖ net_worth ‖ expires, salt)
 ```
+
+`commit` is `xark_poseidon2::commit`: the Poseidon2 sponge in a domain of its own, so no other
+Poseidon2 hash of the same fields (a nullifier, a Merkle node) equals it.
 
 - The **salt** makes the commitment *hiding*. Birth dates, countries and round net worths are few
   enough to guess; without a salt an attacker hashes every plausible identity and matches yours. A
@@ -28,7 +31,6 @@ commitment = Poseidon2(document, born ‖ nationality ‖ net_worth ‖ expires,
 
 ```rust
 use xark::prelude::*;
-use xark_hash::Hash;
 
 /// A day this circuit's dates can be: 1900-01-01 to 2100-12-31, 17 bits.
 pub type Day = Days<1900, 2100>;
@@ -45,9 +47,10 @@ pub struct Identity {
 
 #[input]
 impl Identity {
-    /// The issuer's commitment: Poseidon2 over every field, so adding one extends it.
+    /// The issuer's commitment: Poseidon2's `commit` over every field, so adding one
+    /// extends it.
     pub fn commitment(&self) -> Field {
-        xark_poseidon2::hash(self.to_fields())
+        xark_poseidon2::commit(self.to_fields())
     }
 }
 
@@ -65,7 +68,7 @@ pub fn zkyc(
     id: Private<Identity>,
     commitment: Public<Field>,
     policy: Public<Policy>,
-    holder: Public<Hash>,
+    holder: Public<Address>,
 ) {
     require_eq(id.commitment(), commitment);
     require(id.born <= policy.born_by);
@@ -77,7 +80,8 @@ pub fn zkyc(
 ```
 
 It's [xark's `zkyc`](https://github.com/blueshift-gg/xark/blob/master/examples/zkyc/src/lib.rs)
-with a holder added (below). The [full circuit](./circuits/zkyc/src/lib.rs) also has `Policy`'s builder
+with a holder added (below) and the commitment made with `commit`. The
+[full circuit](./circuits/zkyc/src/lib.rs) also has `Policy`'s builder
 (`Policy::default().on(today).min_age(18).worth_at_least(500_000).nationalities([US, GB, FR, DE])`)
 and the tests.
 
@@ -116,6 +120,7 @@ range, and the TypeScript client takes it in its natural form:
 | `Choice<Country>` | one ISO 3166 code: its position among 249, 8 bits | `Country.US`, or `"US"` |
 | `Bitfield<Country>` | a set of codes: bit `i` for the country at position `i` | `["DE", "FR", "GB", "US"]` |
 | `u64` | range-checked to 64 bits on entry | a number or a `bigint` |
+| `Address` | a Solana address: two field elements, its 16-byte halves | @solana/kit's `Address` |
 
 `id.nationality.require_in(policy.allowed)` is a set membership check over all 249 countries, one
 factor each; with the commitment's Poseidon2 it's most of the circuit's 1,350 constraints.
@@ -172,9 +177,10 @@ own, and the proof verifies only if the holder proved against exactly that.
 ## The proof is for one wallet
 
 Without `holder`, a proof says *someone* holding this credential passes, and anyone who sees it
-onchain could submit it as their own. So the holder's wallet is a public input: a Solana address
-is 32 bytes, which the circuit takes as xark's `Hash` (two 16-byte halves). The program fills it
-from the transaction's signer, so the proof only verifies when the wallet it was made for signs.
+onchain could submit it as their own. So the holder's wallet is a public input, an `Address`:
+xark's Solana address, two field elements, its 16-byte halves. The client takes the wallet's
+address as @solana/kit has it, and the program fills it from the transaction's signer, so the proof
+only verifies when the wallet it was made for signs.
 
 Nothing in the circuit computes with `holder`, and that's a trap: Groth16 checks a public input only
 through the constraints that use it, so an unused one would verify with any value. `xark build`
@@ -213,7 +219,7 @@ let inputs = PublicInputs {
     commitment: *commitment,
     // born_by: the same day MIN_AGE years earlier (the 28th for a missing 29 February)
     policy: Policy { today, born_by: born_by(today)?, min_net_worth: MIN_NET_WORTH, allowed: ALLOWED },
-    holder: *holder.address().as_array(), // a `Hash`: split into hi and lo for you
+    holder: *holder.address().as_array(), // an `Address`: split into hi and lo for you
 };
 if !verify(&proof, inputs) { … }
 ```
@@ -239,7 +245,7 @@ naming the line.
 ```ts
 const commitment = Identity.commitment(id);   // the issuer's
 const policy = Policy.default().on(new Date()).minAge(18).worthAtLeast(500_000).nationalities(["DE", "FR", "GB", "US"]);
-const proof = prover.prove({ id, commitment, policy, holder: walletBytes });
+const proof = prover.prove({ id, commitment, policy, holder: wallet.address });
 // a transaction signed by the holder, data: [0] ‖ proof.toBytes() ‖ commitment.toBytes()
 ```
 

@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 xark = "0.4"
 xark-poseidon2 = "0.4"
-xark-hash = "0.4"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

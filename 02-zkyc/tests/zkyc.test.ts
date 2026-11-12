@@ -1,7 +1,7 @@
 // An issuer commits to a holder's identity; the holder proves it meets the program's
 // policy with the generated client; the program checks the proof against the
 // commitment, its own policy on today's date, and the signer.
-import { AccountRole, generateKeyPairSigner, getAddressEncoder, type Address, type KeyPairSigner } from "@solana/kit";
+import { AccountRole, address, generateKeyPairSigner, type Address, type KeyPairSigner } from "@solana/kit";
 import type { LiteSVM } from "litesvm";
 import { circuit, funded, program as deployed, send, vm } from "@blueshift-gg/xark/testing";
 import { CheckFailed, Country, Field, Identity, Policy, Zkyc, type ZkycProver } from "../clients/zkyc/ts/zkyc";
@@ -41,7 +41,6 @@ const verifyKyc = (holder: KeyPairSigner, proof: Uint8Array, commitment: Field) 
   accounts: [{ address: holder.address, role: AccountRole.READONLY_SIGNER, signer: holder }],
   data: new Uint8Array([0, ...proof, ...commitment.toBytes()]),
 });
-const bytes = (a: Address) => new Uint8Array(getAddressEncoder().encode(a));
 
 /** Set the VM's clock to noon UTC on `day`. */
 function setDay(svm: LiteSVM, day: string) {
@@ -61,7 +60,7 @@ test("a compliant holder passes KYC onchain, under the program's policy and for 
 
   const policy = programs("2026-10-22");
   expect(policy.bornBy).toEqual(new Date("2008-10-22"));
-  const proof = prover.prove({ id, commitment, policy, holder: bytes(holder.address) });
+  const proof = prover.prove({ id, commitment, policy, holder: holder.address });
   const ok = await send(svm, payer, verifyKyc(holder, proof.toBytes(), commitment));
   expect(ok.computeUnitsConsumed()).toBeLessThan(200_000n);
 
@@ -89,7 +88,7 @@ test("the verifier picks the rules, not the prover", async () => {
   setDay(svm, "2026-10-22");
 
   const lax = programs("2026-10-22").worthAtLeast(0);
-  const proof = prover.prove({ id, commitment, policy: lax, holder: bytes(holder.address) });
+  const proof = prover.prove({ id, commitment, policy: lax, holder: holder.address });
   await expect(send(svm, payer, verifyKyc(holder, proof.toBytes(), commitment))).rejects.toThrow(/InvalidProof/);
 });
 
@@ -97,7 +96,7 @@ test("an identity that fails the policy has no proof", () => {
   const policy = programs("2026-10-22");
   const prove = (changes: Partial<Identity>) => () => {
     const id = credential(changes);
-    prover.prove({ id, commitment: Identity.commitment(id), policy, holder: new Uint8Array(32) });
+    prover.prove({ id, commitment: Identity.commitment(id), policy, holder: address("11111111111111111111111111111111") });
   };
   // The client names the check that fails, from the circuit's source.
   expect(prove({ born: new Date("2008-10-23") })).toThrow(CheckFailed); // 18 tomorrow

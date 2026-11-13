@@ -43,12 +43,12 @@ The circuit's inputs are its domain, as Rust types the TypeScript client gets as
 #[input] pub struct Key { pub secret: Field }
 #[input] pub struct Note { pub value: u64, pub owner: Field, pub rho: Field, pub rseed: Field }
 #[input] pub struct Spend { pub note: Note, pub diversifier: Field, pub path: Path, pub real: bool }
-#[input] pub struct Flow { pub vpub_in: u64, pub vpub_out: u64, pub fee: u64, pub recipient: Hash, pub relayer: Hash }
+#[input] pub struct Flow { pub vpub_in: u64, pub vpub_out: u64, pub fee: u64, pub recipient: Address, pub relayer: Address }
 
 /// What the program checks a transaction against: the public inputs, in this order.
 #[input]
 pub struct Transaction {
-    pub root: Field, pub asset: Hash, pub nullifiers: [Field; 2], pub commitments: [Field; 2],
+    pub root: Field, pub asset: Address, pub nullifiers: [Field; 2], pub commitments: [Field; 2],
     pub old_root: Field, pub new_root: Field, pub index: u32, pub flow: Flow, pub memos: [Hash; 2],
 }
 
@@ -60,11 +60,15 @@ pub fn shielded_transact(key: Private<Key>, spends: Private<[Spend; 2]>, outputs
 - **Keys (Sapling-lite).** `Key::nullifier_key` and `Key::viewing_key` derive from the secret;
   `Key::address(diversifier)` from the viewing key, as many unlinkable addresses as the holder
   likes. Spending needs the secret; recognizing your addresses needs only the viewing key.
-- **Notes.** `Note::commitment(asset)` hashes every field with the pool's mint, so notes are
-  per-token. `rho` and `rseed` keep otherwise-identical notes distinct and hidden.
-- **Nullifiers.** `Note::nullifier(key, asset, position)` binds the spender's key, the note *and*
-  its position in the tree: one nullifier per note (revealed once, so no double spend), unlinkable
-  to the commitment without the key.
+- **Notes.** `Note::commitment(asset)` is `commit` over every field and the pool's mint, so notes
+  are per-token. `rho` and `rseed` keep otherwise-identical notes distinct and hidden.
+- **Nullifiers.** `Note::nullifier(key, asset, position)` is `nullifier` over the spender's
+  nullifier key, the note's commitment *and* its position in the tree: one nullifier per note
+  (revealed once, so no double spend), unlinkable to the commitment without the key.
+
+`commit` and `nullifier` are `xark-poseidon2`'s: the Poseidon2 sponge, each in a domain of its own,
+so a commitment, a nullifier and a tree node can't stand in for one another. The keys are its plain
+`hash`, each with a tag of its own.
 
 Each is `#[input] impl` Rust that the circuit uses and the client calls, so the wallet computes
 commitments, addresses and nullifiers with the code the proof checks: `Key.address(key, d)`,
@@ -78,15 +82,40 @@ In one proof: each real spend is in the tree at a remembered `root`, owned by th
 commitment revealed; value is conserved; and, 04's trick again, the two outputs are appended
 (`old_root → new_root`) so the chain never hashes. Every value is a `u64` input, range-checked on
 entry, so no sum can wrap the field. The program always appends notes in pairs at an even slot, so
-the second output's path is the first's with the first beside it: two `xark-merkle` roots, before
-and after, prove the whole append.
+the pair is one leaf of the tree of pairs, the height-1 subtrees: `Path::append_pair` is
+`xark-merkle`'s `merkle_append` on the path's upper 19 levels, proving the pair's subtree was empty
+under `old_root` and giving `new_root` with the two notes in it.
 
 The public inputs are one `Transaction`: 19 field elements, `root, asset (hi, lo), nullifiers[2],
 commitments[2], old_root, new_root, index, flow, recipient (hi, lo), relayer (hi, lo), memos[2]
 (hi, lo each)`. `flow` is `Flow`'s three `u64`s packed into one element, as xark packs a struct's
-narrow fields: `vpub_in + vpub_out·2⁶⁴ + fee·2¹²⁸`. Addresses (the mint, the token accounts) and memo hashes are all
-32 bytes, which the circuit takes as xark's `Hash`. The circuit imports 04's `pool` crate for `Path`;
+narrow fields: `vpub_in + vpub_out·2⁶⁴ + fee·2¹²⁸`. Addresses (the mint, the token accounts) are
+xark's `Address` and memo hashes xark's `Hash`, each 32 bytes in two 16-byte halves; the client
+takes the addresses as @solana/kit's `Address`. The circuit imports 04's `pool` crate for `Path`;
 `xark profile` attributes every constraint to a source line.
+
+The program never packs those elements itself. `xark build` generates the verifier crate
+`clients/shielded_transact/rust/` from the circuit, with the `Transaction` as a Rust struct of named
+fields, and the program fills it from the instruction and its own state:
+
+```rust
+use shielded_transact_verifier::{Flow, PublicInputs, Transaction, verify};
+
+let inputs = PublicInputs {
+    tx: Transaction {
+        root: *data.root,
+        asset: pool.mint,                        // an `Address`: split into (hi, lo) for you
+        nullifiers: data.nf.map(|nf| *nf),
+        commitments: data.cm_out.map(|cm| *cm),
+        old_root: *pool.current_root(),
+        new_root: *data.new_root,
+        index: u32::from_le_bytes(pool.next_index),
+        flow: Flow { vpub_in, vpub_out, fee, recipient, relayer }, // packed into one element
+        memos: data.memos.map(|memo| hash(memo).to_bytes()),
+    },
+};
+if !verify(&proof, inputs) { … }
+```
 
 ## Delivery: encrypted memos, off-circuit
 
@@ -102,7 +131,7 @@ The spender shouldn't sign their own private transfer: their wallet would pay th
 for the nullifier accounts, and so appear onchain beside it. So anyone can submit a transaction,
 and take `fee` of the pool's token for it. `fee` and the relayer's token account are public inputs
 (`Flow`), so the proof pays only the relayer it was made for, and the fee comes out of the notes
-spent: `spent + vpub_in == created + vpub_out + fee`. In the [test](./client/shielded-transfer.test.ts),
+spent: `spent + vpub_in == created + vpub_out + fee`. In the [test](./tests/shielded-transfer.test.ts),
 Bob holds no SOL at all, and a relayer submits both Alice's payment and his withdrawal; someone else
 submitting his withdrawal, redirected to their account, fails.
 
@@ -113,18 +142,18 @@ the vault; withdrawals and fees transfer out, signed by the pool PDA. A transact
 token accounts it uses: a deposit its source (`user_token`), a withdrawal its destination
 (`recipient_token`), a fee the relayer's (`relayer_token`).
 
-A transact uses 166k to 180k compute units (measured in the test over six runs), almost all of it
+A transact uses 171k to 183k compute units (measured in the test over six runs), almost all of it
 the Groth16 check. It varies with the public inputs, and by 1.5k for each extra try
 `find_program_address` takes to find a nullifier's bump. That's close to the default limit of 200k,
 so the client asks for 250k with a compute budget instruction.
 
 ## The program
 
-[`program/`](./program/src/lib.rs) is one Pinocchio crate, no framework, laid out as Pinocchio
-programs usually are:
+[`programs/shielded-transfer/`](./programs/shielded-transfer/src/lib.rs) is one Pinocchio crate,
+no framework, laid out as Pinocchio programs usually are:
 
 ```
-program/src/
+programs/shielded-transfer/src/
   lib.rs                    the entrypoint: dispatch on the first byte, log a custom error's name
   instructions/
     initialize.rs           InitializeAccounts, Initialize
@@ -142,19 +171,27 @@ signers and writable flags; the token and system program ids; the pool owned by 
 pool's size, at its PDA; the vault at its PDA, the pool's token account of the pool's mint; each
 nullifier at its canonical PDA and not yet spent; each token account given the token program's,
 initialized, and of the pool's mint. `initialize` refuses a pool or vault that already exists, and
-pays each new account's rent-exempt minimum. The program's host tests (`cargo test --release` in
-`program/`) refuse each of these on fake accounts, and check that the demo proof verifies against
-the public inputs the program assembles.
+pays each new account's rent-exempt minimum. The program's host tests (part of `xark test`) refuse
+each of these on fake accounts, and check that the demo proof verifies against the public inputs
+the program assembles.
 
 ## Run it
 
 ```bash
-npm run build          # circuit → key → verifier crate → client → .so
-npm run test:circuit   # deposit, pay privately, and what's refused; then the program's host tests
-npm test               # prove with the client, transact onchain (LiteSVM)
+xark build     # circuit, its clients (Rust verifier crate, TypeScript), then the program
+xark test      # the circuit's tests (deposit, pay privately, and what's refused), the program's
+               # host tests, then prove with the client and transact onchain (LiteSVM)
 ```
 
-The [test](./client/shielded-transfer.test.ts) is the reference wallet: Alice shields 150, then
+`npm run check` is CI's `xark build --check`: the committed keys and clients are what the source
+builds. Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks them).
+
+The verifier crate bundles a sample proof, a deposit of 150 into an empty pool, which its own
+self-test and the program's host tests check. [`examples/demo.rs`](./circuits/shielded_transact/examples/demo.rs)
+makes it (`cargo run --release --example demo` in the circuit's directory, then `xark build`); a
+rebuild keeps it while it verifies.
+
+The [test](./tests/shielded-transfer.test.ts) is the reference wallet: Alice shields 150, then
 pays Bob 100 privately with 45 change and 5 to a relayer (only the fee moves onchain), and Bob,
 who holds no SOL, withdraws 95 through the relayer for another 5. The vault ends at 45 (Alice's
 change, still shielded); Bob's withdrawal, redirected by someone else to their account or their fee,
@@ -162,18 +199,21 @@ fails; a second withdrawal of Bob's note is refused; and Mallory can't spend Ali
 client names the failing line, `key.address(spend.diversifier)`. The wallet keeps every note's
 `Path` current as outputs land, with 04's `Path.update`.
 
-It proves across 8 worker threads: [`pooled`](./client/harness.ts) hands the client `@blueshift-gg/xark` with
-`prove` routed through its worker pool, as the prover's `wasm` option. On an M4 Max that's about
-0.9 s per proof instead of 3.7 s, with the same proofs and the same errors.
+It proves across 8 worker threads: [`pooled`](./tests/helpers.ts) hands the client `@blueshift-gg/xark` with
+`prove` routed through its worker pool, as the prover's `wasm` option. On an M3 Max that's about
+0.9 s per proof instead of 4 s, with the same proofs and the same errors.
 
 ## Anatomy
 
 ```
-circuits/transact/   the JoinSplit circuit: keys, notes, nullifiers, balance, membership, the
-                     pair append; imports 04's circuits/pool
-client/              the generated client, and the wallet test
-program/             Pinocchio + SPL: verify, burn nullifiers, advance the tree, move SPL for
-                     vpub_in/out, log memo events
+circuits/shielded_transact/  the JoinSplit circuit: keys, notes, nullifiers, balance, membership,
+                             the pair append; imports 04's circuits/pool
+programs/shielded-transfer/  Pinocchio + SPL: verify, burn nullifiers, advance the tree, move SPL
+                             for vpub_in/out, log memo events
+clients/shielded_transact/   generated by `xark build`: the verifier crate (rust/) and the
+                             TypeScript client (ts/)
+keys/shielded_transact/      the proving and verifying keys the clients are made for
+tests/                       the wallet test (LiteSVM)
 ```
 
 ## Deployment boundaries

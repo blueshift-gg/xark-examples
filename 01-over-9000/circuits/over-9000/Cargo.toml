@@ -1,0 +1,17 @@
+[package]
+name = "over-9000"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+xark = { version = "0.4" }
+# From git:               xark = { git = "https://github.com/blueshift-gg/xark" }
+# From a local checkout:  xark = { path = "../xark/crates/lang" }
+
+# `xark` is set only by the circuit build; declare it so rustc's `unexpected_cfgs`
+# lint (1.80+) stays quiet.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

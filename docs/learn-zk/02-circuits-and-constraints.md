@@ -32,8 +32,8 @@ modulo a large prime. That has two practical consequences:
 
 - **Ordering and bit operations need explicit bounds.** The `u64` in `> 9000u64` makes xark
   decompose the value into 64 constrained bits before comparing it.
-- **Circuit-friendly hashes matter.** Poseidon and Poseidon2 are much cheaper in field arithmetic
-  than SHA-256, so the shielded examples use them for commitments, nullifiers, and Merkle nodes.
+- **Circuit-friendly hashes matter.** Poseidon2 is much cheaper in field arithmetic than SHA-256,
+  so the examples use it for commitments, nullifiers, and Merkle nodes.
 
 ## Witness = a satisfying assignment
 

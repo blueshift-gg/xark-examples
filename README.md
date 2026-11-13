@@ -45,10 +45,10 @@ the examples below are that choice made six ways.
 
 ```
   Rust circuit       you write the rules: what's secret, what's public, what must hold
-     │ xark build      stable rustc → wasm → R1CS
-     │ xark setup      Groth16 keys (single-party here; `xark ceremony` for a multi-party one)
-     ├─▶ xark export   a verifier crate, the key baked in ─▶ your Solana program
-     └─▶ xark client   a typed TypeScript client
+     │ xark build      stable rustc → wasm → R1CS, Groth16 keys (single-party here;
+     │                 `xark ceremony` for a multi-party one), then the clients:
+     ├─▶ clients/<circuit>/rust   a verifier crate, the key baked in ─▶ your Solana program
+     └─▶ clients/<circuit>/ts     a typed TypeScript client
                            │ prover.prove({ ...typed inputs })
                            ▼
   your app           a 256-byte proof, sent in a transaction
@@ -57,30 +57,31 @@ the examples below are that choice made six ways.
   Solana program     verify(proof, public inputs) via the native alt_bn128 syscalls
 ```
 
-From [02's test](./02-zkyc/client/zkyc.test.ts), the whole app side:
+From [02's test](./02-zkyc/tests/zkyc.test.ts), the whole app side:
 
 ```ts
 const prover = await Zkyc.prover("/circuits/zkyc/", { digest: Zkyc.digest });
 const commitment = Identity.commitment(id);   // the circuit crate's Rust, run from TypeScript
 const policy = Policy.default().on(new Date()).minAge(18).worthAtLeast(500_000).nationalities(["DE", "FR", "GB", "US"]);
-const proof = prover.prove({ id, commitment, policy, holder: walletBytes });
+const proof = prover.prove({ id, commitment, policy, holder: wallet.address });
 // → a transaction signed by the holder, data: proof.toBytes() ‖ commitment.toBytes()
 ```
 
-A program never parses the proof itself. It assembles the public inputs from its own state and the
-transaction, so a proof only holds for what the program says is true, and makes one call:
-`verify(&Proof::from_le_bytes(&proof), &public_inputs)`.
+A program never parses the proof itself. It fills in the circuit's public inputs, by name, from its
+own state and the transaction, so a proof only holds for what the program says is true, and makes
+one call: `verify(&Proof::from_le_bytes(&proof), PublicInputs { .. })`. The generated crate packs
+them as the circuit does.
 
 ## Run it
 
 ```bash
 npm ci          # one install for every example: the root is an npm workspace
-npm run build   # every example: circuit → keys → verifier → client → program
-npm test        # every example's client tests: prove, then verify onchain
+npm run build   # every example's `xark build`: circuits, keys, clients, program
+npm test        # every example's `xark test`: circuit and program tests, then prove and verify onchain
 ```
 
-Or one example: `cd 02-zkyc && npm run build && npm test`. Each example is its own project, with its
-own `package.json` and tests, so you can copy one out and start from it (06 also takes 04's
+Or one example: `cd 02-zkyc && xark build && xark test`. Each example is its own xark project
+(`xark init` makes one), with its own `xark.toml`, workspace, `package.json` and tests, so you can copy one out and start from it (06 also takes 04's
 `circuits/pool` crate). Prerequisites (stable Rust, `cargo-build-sbf`, Node, and xark):
 [RUNBOOK.md](./RUNBOOK.md); `xark doctor` checks the Rust and xark side. Each example's README walks
 its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
@@ -90,17 +91,17 @@ its circuit; [01's](./01-over-9000/) also builds one from `xark init`.
 | Circuit | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | Onchain CU |
 |---|--:|--:|--:|--:|--:|
 | 01 `over_9000` | 128 | 0 | 20 ms | 9 ms | 75,903 |
-| 02 `zkyc` | 1,350 | 5 | 211 ms | 70 ms | 100,203 |
-| 03 `token_claim` | 5,437 | 4 | 989 ms | 195 ms | 98,048–104,048 |
-| 04 `shielded_pool_deposit` | 9,647 | 4 | 1,635 ms | 403 ms | 91,154–91,747 |
-| 04 `shielded_pool_withdraw` | 5,382 | 7 | 920 ms | 180 ms | 110,351–113,351 |
+| 02 `zkyc` | 1,350 | 5 | 211 ms | 70 ms | 102,549 |
+| 03 `token_claim` | 5,437 | 4 | 989 ms | 195 ms | 97,874–103,874 |
+| 04 `shielded_pool_deposit` | 9,747 | 4 | 1,690 ms | 345 ms | 91,163–91,748 |
+| 04 `shielded_pool_withdraw` | 5,442 | 7 | 1,021 ms | 212 ms | 110,355–113,355 |
 | 05 `vote` | 5,401 | 4 | 947 ms | 191 ms | 90,229–100,635 |
-| 06 `shielded_transact` | 26,123 | 19 | 3,736 ms | 896 ms | 166k–180k |
+| 06 `shielded_transact` | 25,086 | 19 | 3,979 ms | 860 ms | 171k–183k |
 
 Constraints from `xark inspect`. Proving in node through the generated clients; "8 workers" is
-`@blueshift-gg/xark`'s worker pool. The prove times come from two machines: 01, 02, 04 and 06 in
-node 24 on an Apple M4 Max, median of three; 03 and 05 in node 22 on an Apple M3 Max, median of
-five, so compare their times with the others' loosely. Compute units are the whole instruction in
+`@blueshift-gg/xark`'s worker pool. The prove times come from two machines: 01 and 02 in node 24 on
+an Apple M4 Max, median of three; 03 to 06 on an Apple M3 Max, 03 and 05 in node 22, median of
+five, and 04 and 06 in node 26, median of three, so compare their times with the others' loosely. Compute units are the whole instruction in
 LiteSVM, so 03 to 06 include the accounts they create and the tokens or lamports they move. They
 vary with the public inputs, and by 1,500 for each extra try a program takes to find a new
 account's bump.
@@ -109,7 +110,7 @@ A proof is always 256 bytes.
 
 ## Testing
 
-Each example's `client/*.test.ts` is its reference app. It proves with the generated client in
+Each example's `tests/*.test.ts` is its reference app. It proves with the generated client in
 node, then sends the proof to the example's program in [LiteSVM](https://github.com/LiteSVM/litesvm),
 verified through the same `alt_bn128` syscalls mainnet uses, with no validator and no network. The
 tests cover the happy path and the refusals: a tampered proof, a proof for yesterday, a proof
@@ -117,15 +118,15 @@ submitted by someone else, an address not on the list, a second claim, a strange
 redirected withdrawal or fee, a double spend, a second vote in a poll, a vote replayed for another
 choice or poll. When inputs can't be proved, the client says which
 line of the circuit fails (`CheckFailed`, with the source line). Each circuit also has its own Rust
-tests, and the programs from 02 on have host tests of their own (`npm run test:circuit`).
+tests, and the programs from 02 on have host tests of their own; `xark test` runs them all.
 
 ```
- ✓ client/over-9000.test.ts (2 tests)
- ✓ client/zkyc.test.ts (3 tests)
- ✓ client/token-claim.test.ts (2 tests)
- ✓ client/shielded-pool.test.ts (2 tests)
- ✓ client/anonymous-voting.test.ts (2 tests)
- ✓ client/shielded-transfer.test.ts (2 tests)
+ ✓ tests/over-9000.test.ts (2 tests)
+ ✓ tests/zkyc.test.ts (3 tests)
+ ✓ tests/token-claim.test.ts (2 tests)
+ ✓ tests/shielded-pool.test.ts (2 tests)
+ ✓ tests/anonymous-voting.test.ts (2 tests)
+ ✓ tests/shielded-transfer.test.ts (2 tests)
 ```
 
 ## How xark compares

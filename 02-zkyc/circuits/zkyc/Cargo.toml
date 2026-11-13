@@ -1,0 +1,14 @@
+# The zkyc circuit: an ordinary Rust crate that xark compiles to R1CS.
+[package]
+name = "zkyc"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+xark = "0.4"
+xark-poseidon2 = "0.4"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

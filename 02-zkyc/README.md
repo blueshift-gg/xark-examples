@@ -15,8 +15,11 @@ An issuer (a KYC provider, a government portal) checks your documents once, comm
 found, and publishes only the result:
 
 ```
-commitment = Poseidon2(document, born ‖ nationality ‖ net_worth ‖ expires, salt)
+commitment = commit(document, born ‖ nationality ‖ net_worth ‖ expires, salt)
 ```
+
+`commit` is `xark_poseidon2::commit`: the Poseidon2 sponge in a domain of its own, so no other
+Poseidon2 hash of the same fields (a nullifier, a Merkle node) equals it.
 
 - The **salt** makes the commitment *hiding*. Birth dates, countries and round net worths are few
   enough to guess; without a salt an attacker hashes every plausible identity and matches yours. A
@@ -28,7 +31,6 @@ commitment = Poseidon2(document, born ‖ nationality ‖ net_worth ‖ expires,
 
 ```rust
 use xark::prelude::*;
-use xark_hash::Hash;
 
 /// A day this circuit's dates can be: 1900-01-01 to 2100-12-31, 17 bits.
 pub type Day = Days<1900, 2100>;
@@ -45,9 +47,10 @@ pub struct Identity {
 
 #[input]
 impl Identity {
-    /// The issuer's commitment: Poseidon2 over every field, so adding one extends it.
+    /// The issuer's commitment: Poseidon2's `commit` over every field, so adding one
+    /// extends it.
     pub fn commitment(&self) -> Field {
-        xark_poseidon2::hash(self.to_fields())
+        xark_poseidon2::commit(self.to_fields())
     }
 }
 
@@ -65,7 +68,7 @@ pub fn zkyc(
     id: Private<Identity>,
     commitment: Public<Field>,
     policy: Public<Policy>,
-    holder: Public<Hash>,
+    holder: Public<Address>,
 ) {
     require_eq(id.commitment(), commitment);
     require(id.born <= policy.born_by);
@@ -77,7 +80,8 @@ pub fn zkyc(
 ```
 
 It's [xark's `zkyc`](https://github.com/blueshift-gg/xark/blob/master/examples/zkyc/src/lib.rs)
-with a holder added (below). The [full circuit](./circuit/src/lib.rs) also has `Policy`'s builder
+with a holder added (below) and the commitment made with `commit`. The
+[full circuit](./circuits/zkyc/src/lib.rs) also has `Policy`'s builder
 (`Policy::default().on(today).min_age(18).worth_at_least(500_000).nationalities([US, GB, FR, DE])`)
 and the tests.
 
@@ -116,6 +120,7 @@ range, and the TypeScript client takes it in its natural form:
 | `Choice<Country>` | one ISO 3166 code: its position among 249, 8 bits | `Country.US`, or `"US"` |
 | `Bitfield<Country>` | a set of codes: bit `i` for the country at position `i` | `["DE", "FR", "GB", "US"]` |
 | `u64` | range-checked to 64 bits on entry | a number or a `bigint` |
+| `Address` | a Solana address: two field elements, its 16-byte halves | @solana/kit's `Address` |
 
 `id.nationality.require_in(policy.allowed)` is a set membership check over all 249 countries, one
 factor each; with the commitment's Poseidon2 it's most of the circuit's 1,350 constraints.
@@ -141,7 +146,7 @@ policy[1] = allowed                                         (a Bitfield: an elem
 ```
 
 `Identity` packs the same way: `born`, `nationality`, `net_worth` and `expires` share one element,
-so its commitment hashes three. `xark inspect circuit --json` lists every public input leaf by
+so its commitment hashes three. `xark inspect --json` lists every public input leaf by
 leaf, in proof order, and names the packed ones by their fields:
 
 ```
@@ -152,8 +157,10 @@ holder.hi
 holder.lo
 ```
 
-The program has to produce those exact bytes, so packing is part of its interface, and its tests
-check its packing against the circuit's `Policy::to_fields()` for every day from 1918 to 2100.
+The program has to produce those exact bytes, but it doesn't pack them by hand: `xark build`
+generates `PublicInputs` in the verifier crate, which packs from the circuit's schema as `#[input]`
+does. The program's tests check it against the circuit's `Policy::to_fields()` for every day from
+1918 to 2100.
 
 ## A policy is a public input
 
@@ -170,9 +177,10 @@ own, and the proof verifies only if the holder proved against exactly that.
 ## The proof is for one wallet
 
 Without `holder`, a proof says *someone* holding this credential passes, and anyone who sees it
-onchain could submit it as their own. So the holder's wallet is a public input: a Solana address
-is 32 bytes, which the circuit takes as xark's `Hash` (two 16-byte halves). The program fills it
-from the transaction's signer, so the proof only verifies when the wallet it was made for signs.
+onchain could submit it as their own. So the holder's wallet is a public input, an `Address`:
+xark's Solana address, two field elements, its 16-byte halves. The client takes the wallet's
+address as @solana/kit has it, and the program fills it from the transaction's signer, so the proof
+only verifies when the wallet it was made for signs.
 
 Nothing in the circuit computes with `holder`, and that's a trap: Groth16 checks a public input only
 through the constraints that use it, so an unused one would verify with any value. `xark build`
@@ -181,15 +189,15 @@ refuses such a circuit. `bind(holder)` is the fix: one constraint per half, Torn
 
 ## The program supplies the rest
 
-The [program](./program/src/) has one instruction, `VerifyKyc`: the holder signs, and the instruction
-data is its discriminator `0`, then `proof ‖ commitment`. It assembles every other public input
-itself.
+The [program](./programs/zkyc/src/) has one instruction, `VerifyKyc`: the holder signs, and the
+instruction data is its discriminator `0`, then `proof ‖ commitment`. It assembles every other public
+input itself.
 
 ```
-program/src/
+programs/zkyc/src/
   lib.rs                      entrypoint: dispatch on the discriminator, log the error's name
   instructions/verify_kyc.rs  the accounts (the holder, a signer), the data, verify
-  policy.rs                   the program's policy, packed as the circuit takes it, and the calendar
+  policy.rs                   the program's policy as the circuit's `Policy`, and the calendar
   errors.rs                   ZkycError::InvalidProof (0)
   tests.rs                    host tests
 ```
@@ -200,24 +208,35 @@ doesn't verify is the program's own `InvalidProof`, custom error 0, whose name i
 is three constants and the clock:
 
 ```rust
+use zkyc_verifier::{Bitfield, Country, Days, Policy, PublicInputs, verify};
+
 const MIN_AGE: i64 = 18;
 const MIN_NET_WORTH: u64 = 500_000;
-const ALLOWED: [u8; 32] = countries(&[56, 74, 76, 232]); // DE, FR, GB, US
+const ALLOWED: Bitfield<Country> = Bitfield::EMPTY.with(DE).with(FR).with(GB).with(US);
 
-let (y, m, d) = civil_from_days(unix.div_euclid(86_400));  // today, UTC, from the Clock sysvar
-// born_by: the same day MIN_AGE years earlier (the 28th for a missing 29 February)
-let packed = today | born_by << 17 | MIN_NET_WORTH << 34;   // as a u128, little-endian
-let public_inputs = [commitment, packed, ALLOWED, holder_hi, holder_lo];
+let today = Days::<1900, 2100>::from_unix(clock.unix_timestamp)?; // today, UTC
+let inputs = PublicInputs {
+    commitment: *commitment,
+    // born_by: the same day MIN_AGE years earlier (the 28th for a missing 29 February)
+    policy: Policy { today, born_by: born_by(today)?, min_net_worth: MIN_NET_WORTH, allowed: ALLOWED },
+    holder: *holder.address().as_array(), // an `Address`: split into hi and lo for you
+};
+if !verify(&proof, inputs) { … }
 ```
 
-The program can't link xark, so it computes the dates, as the circuit's day counts, in a few lines
-of `no_std` Rust (Howard Hinnant's `civil_from_days`). Its tests check the calendar against fixed
-dates, the policy against the circuit's own for every day from 1918 to 2100, the four country
-positions against `Bitfield::of([DE, FR, GB, US])`, and the demo proof against what it assembles:
-it verifies for its holder and day, and not for another wallet, another day or another commitment.
+The verifier crate `xark build` generates ([`clients/zkyc/rust`](./clients/zkyc/rust/src/lib.rs))
+gives the program the circuit's types without linking xark: `Days` for the dates, `Bitfield<Country>`
+for the allow-list, and `PublicInputs`, which packs them. A minimum age is the one thing it leaves to
+the program, the calendar math `min_age` does in the circuit's Rust, so `born_by` does it with the
+`time` crate (without its default features, so `no_std`). Its tests check the policy against the
+circuit's own for every day from 1918 to 2100, `ALLOWED` against `Bitfield::of([DE, FR, GB, US])`,
+and the demo proof
+([`circuits/zkyc/examples/demo.rs`](./circuits/zkyc/examples/demo.rs), the verifier crate's sample)
+against what it assembles: it verifies for its holder and day, and not for another wallet, another
+day or another commitment.
 
 A prover can't loosen the rules, backdate or postdate, and a proof made today stops verifying
-tomorrow. The [test](./client/zkyc.test.ts) shows each case: the proof verifies today for its
+tomorrow. The [test](./tests/zkyc.test.ts) shows each case: the proof verifies today for its
 wallet, and fails for another wallet, for someone else's commitment, the next day, and when made
 against a laxer policy than the program's. An identity that fails the policy (too young, too poor,
 the wrong nationality, an expired document) has no proof at all: the client throws `CheckFailed`
@@ -226,7 +245,7 @@ naming the line.
 ```ts
 const commitment = Identity.commitment(id);   // the issuer's
 const policy = Policy.default().on(new Date()).minAge(18).worthAtLeast(500_000).nationalities(["DE", "FR", "GB", "US"]);
-const proof = prover.prove({ id, commitment, policy, holder: walletBytes });
+const proof = prover.prove({ id, commitment, policy, holder: wallet.address });
 // a transaction signed by the holder, data: [0] ‖ proof.toBytes() ‖ commitment.toBytes()
 ```
 
@@ -242,13 +261,13 @@ crates.
 
 **Make the policy configurable.** Constants keep the example short. A program serving several
 verifiers would keep each policy (minimum age, net worth, allowed countries) in an account its
-owner sets, and pack it the same way.
+owner sets, and build its `Policy` the same way.
 
 ## Numbers
 
 | Constraints | Public inputs | Prove, 1 thread | Prove, 8 workers | Onchain CU |
 |--:|--:|--:|--:|--:|
-| 1,350 | 5 | 211 ms | 70 ms | 100,203 |
+| 1,350 | 5 | 211 ms | 70 ms | 102,549 |
 
 Measured as in the [root README](../README.md#numbers): `xark inspect`, the generated client in
 node, the whole instruction in LiteSVM.
@@ -256,9 +275,11 @@ node, the whole instruction in LiteSVM.
 ## Run it
 
 ```bash
-npm run build          # circuit → key → verifier crate → client → .so
-npm run test:circuit   # who passes, who doesn't; then the program's policy and packing
-npm test               # issue, prove with the client, verify onchain (LiteSVM)
+xark build     # circuit, its clients (Rust verifier crate, TypeScript), then the program
+xark test      # who passes, who doesn't; the program's policy; then issue, prove, verify onchain
 ```
+
+`npm run check` is CI's `xark build --check`: the committed keys and clients are what the source
+builds. Prerequisites: [../RUNBOOK.md](../RUNBOOK.md) (`xark doctor` checks them).
 
 Next → [03 · Token claim](../03-token-claim/): Merkle trees in a circuit

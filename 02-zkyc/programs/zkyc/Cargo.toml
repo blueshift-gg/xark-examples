@@ -13,6 +13,8 @@ crate-type = ["cdylib", "lib"]
 # circuit changes, and this is the only thing that updates.
 zkyc-verifier = { path = "../../clients/zkyc/rust" }
 pinocchio = "0.11"
+# The calendar for a minimum age.
+time = { version = "0.3", default-features = false }
 
 # Host tests check the program's policy against the circuit's own.
 [dev-dependencies]

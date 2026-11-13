@@ -1,6 +1,6 @@
 use crate::policy::*;
-use xark::Field;
 use xark::prelude::{Bitfield, Country::*};
+use xark::{Field, Timestamp};
 use zkyc::Policy;
 use zkyc_verifier::{Proof, PublicInputs, verify};
 
@@ -18,8 +18,8 @@ fn circuits(today: zkyc::Day) -> Policy {
 /// element: the dates, and the generated crate's packing of them.
 #[test]
 fn the_policy_is_the_circuits() {
-    let start = days_from_civil(1918, 1, 1) * 86_400;
-    let end = days_from_civil(2101, 1, 1) * 86_400;
+    let start = Timestamp::new(1918, 1, 1).unix();
+    let end = Timestamp::new(2101, 1, 1).unix();
     for unix in (start..end).step_by(86_400) {
         let today = zkyc::Day::from_unix(unix).unwrap();
         let want = circuits(today);
@@ -58,10 +58,10 @@ fn allowed_is_four_countries() {
 /// No policy outside the circuit's days: a `born_by` before 1900, or after 2100.
 #[test]
 fn no_policy_outside_the_circuits_days() {
-    assert!(policy(days_from_civil(1917, 12, 31) * 86_400).is_none());
-    assert!(policy(days_from_civil(1918, 1, 1) * 86_400).is_some());
-    assert!(policy(days_from_civil(2100, 12, 31) * 86_400).is_some());
-    assert!(policy(days_from_civil(2101, 1, 1) * 86_400).is_none());
+    assert!(policy(Timestamp::new(1917, 12, 31).unix()).is_none());
+    assert!(policy(Timestamp::new(1918, 1, 1).unix()).is_some());
+    assert!(policy(Timestamp::new(2100, 12, 31).unix()).is_some());
+    assert!(policy(Timestamp::new(2101, 1, 1).unix()).is_none());
 }
 
 /// The demo proof (`examples/demo.rs`: holder `[7; 32]`, 2026-10-22) verifies
@@ -72,7 +72,7 @@ fn the_demo_proof_verifies_for_its_holder_and_day() {
     let inputs = include_bytes!("../../../clients/zkyc/rust/public_inputs.solana.bin");
     let proof = Proof::from_le_bytes(proof);
     let commitment: &[u8; 32] = inputs.first_chunk().unwrap();
-    let noon = days_from_civil(2026, 10, 22) * 86_400 + 43_200;
+    let noon = Timestamp::new(2026, 10, 22).unix() + 43_200;
     assert!(verify(
         &proof,
         public_inputs(commitment, noon, &[7; 32]).unwrap()
@@ -89,20 +89,6 @@ fn the_demo_proof_verifies_for_its_holder_and_day() {
         &proof,
         public_inputs(&[1; 32], noon, &[7; 32]).unwrap()
     ));
-}
-
-/// Anchors from Python's `datetime(y, m, d, tzinfo=timezone.utc).timestamp()`.
-#[test]
-fn days_are_calendar_days() {
-    assert_eq!(civil_from_days(0), (1970, 1, 1));
-    assert_eq!(civil_from_days(-1), (1969, 12, 31));
-    assert_eq!(civil_from_days(951_868_800 / 86_400), (2000, 3, 1));
-    assert_eq!(civil_from_days(1_709_164_800 / 86_400), (2024, 2, 29));
-    assert_eq!(civil_from_days(1_792_627_200 / 86_400), (2026, 10, 22));
-    for z in -30_000..100_000 {
-        let (y, m, d) = civil_from_days(z);
-        assert_eq!(days_from_civil(y, m, d), z);
-    }
 }
 
 /// The client tests match the name the program logs for its error.

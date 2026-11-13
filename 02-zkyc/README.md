@@ -227,10 +227,10 @@ if !verify(&proof, inputs) { … }
 The verifier crate `xark build` generates ([`clients/zkyc/rust`](./clients/zkyc/rust/src/lib.rs))
 gives the program the circuit's types without linking xark: `Days` for the dates, `Bitfield<Country>`
 for the allow-list, and `PublicInputs`, which packs them. A minimum age is the one thing it leaves to
-the program, the calendar math `min_age` does in the circuit's Rust, so `born_by` is a few lines of
-`no_std` Rust (Howard Hinnant's `civil_from_days`). Its tests check the calendar against fixed dates,
-the policy against the circuit's own for every day from 1918 to 2100, `ALLOWED` against
-`Bitfield::of([DE, FR, GB, US])`, and the demo proof
+the program, the calendar math `min_age` does in the circuit's Rust, so `born_by` does it with the
+`time` crate (without its default features, so `no_std`). Its tests check the policy against the
+circuit's own for every day from 1918 to 2100, `ALLOWED` against `Bitfield::of([DE, FR, GB, US])`,
+and the demo proof
 ([`circuits/zkyc/examples/demo.rs`](./circuits/zkyc/examples/demo.rs), the verifier crate's sample)
 against what it assembles: it verifies for its holder and day, and not for another wallet, another
 day or another commitment.

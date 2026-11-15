@@ -1,28 +1,11 @@
-# Build artifacts (regenerate with `npm run build`)
+# Build artifacts (regenerate with `xark build`)
 **/target/
 node_modules/
 *.gz
 
-# The verifier crates `xark export` writes beside each circuit. They embed a key
-# that changes with every setup, so each build makes its own.
-*-verifier/
-
-# Rust — commit lockfiles for reproducible example builds
+# Each example commits its keys (keys/) and generated clients (clients/): the
+# verifier crate embeds the key. Its Cargo.lock comes once xark 0.4 is on crates.io.
 Cargo.lock
-!01-over-9000/circuit/Cargo.lock
-!01-over-9000/program/Cargo.lock
-!02-zkyc/circuit/Cargo.lock
-!02-zkyc/program/Cargo.lock
-!03-token-claim/circuit/Cargo.lock
-!03-token-claim/program/Cargo.lock
-!04-shielded-pool/circuits/deposit/Cargo.lock
-!04-shielded-pool/circuits/pool/Cargo.lock
-!04-shielded-pool/circuits/withdraw/Cargo.lock
-!04-shielded-pool/program/Cargo.lock
-!05-anonymous-voting/circuit/Cargo.lock
-!05-anonymous-voting/program/Cargo.lock
-!06-shielded-transfer/circuits/transact/Cargo.lock
-!06-shielded-transfer/program/Cargo.lock
 
 # Keys & secrets — never commit
 *-keypair.json

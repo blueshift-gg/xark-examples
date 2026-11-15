@@ -1,0 +1,16 @@
+# The vote circuit, and the voter list's builder: an ordinary Rust crate that xark
+# compiles to R1CS, and that the client runs to build the list's root and paths.
+[package]
+name = "vote"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+xark = "0.4"
+xark-merkle = "0.4"
+xark-poseidon2 = "0.4"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

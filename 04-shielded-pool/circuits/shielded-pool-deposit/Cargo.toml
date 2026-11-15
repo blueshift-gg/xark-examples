@@ -1,0 +1,14 @@
+# The shielded pool's deposit circuit: an ordinary Rust crate xark compiles to R1CS.
+[package]
+name = "shielded-pool-deposit"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+xark = "0.4"
+pool = { path = "../pool" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }

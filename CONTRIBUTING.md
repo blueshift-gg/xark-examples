@@ -7,18 +7,18 @@ Install the toolchain from `RUNBOOK.md`, then run:
 ```bash
 npm ci
 xark doctor
-npm run build
-npm run check:clients
-npm run test:circuit
-npm test
+npm run build       # every example's xark build
+npm run check       # every example's xark build --check
+npm test            # every example's xark test
 npm run fmt:check
 npm run clippy
 ```
 
-`npm run build` makes keys, verifier crates, clients and SBF programs under ignored `target/` and
-`*-verifier/` directories; `npm test` then proves with each client and verifies onchain in LiteSVM.
-From an example's directory, the same commands check that example alone, as its CI job does. Never commit
-generated keys or real witness data.
+`npm run build` makes each example's circuits, keys, clients and SBF program; `npm test` runs the
+circuits' and programs' Rust tests, then proves with each client and verifies onchain in LiteSVM.
+From an example's directory, `xark build` and `xark test` check that example alone, as its CI job
+does. Commit what `xark build` writes in `keys/` and `clients/` (the verifier crate embeds the
+key); never commit real witness data.
 
 ## Repository contracts
 
@@ -26,18 +26,16 @@ generated keys or real witness data.
   Rust: the client tests call it through the generated clients, and the demo proofs through the
   crate. Don't reimplement them in TypeScript or in a program. The client tests check the
   programs' empty-root constants against the circuits' `Path.first().treeRoot()`.
-- The generated clients are committed so readers see them; `npm run check:clients` fails if one
-  is stale. Rebuild (`npm run build`) and commit the result with the circuit change.
-- Treat public-input order as an API: it's each circuit's public statement struct (`Append`,
-  `Withdrawal`, `Transaction`). A change updates the struct, the program's `public_inputs`, and the
-  README reference together.
-- Each example is its own project (its `package.json`, `tsconfig.json`, `vitest.config.ts` and
-  `client/harness.ts`), so one can be copied out alone. The harnesses repeat on purpose; keep
-  each to what its example uses.
-- Programs build with `cargo build-sbf --arch v3`. The generated verifier crates take
-  `xark-verifier` with its default `static-syscalls` feature, which only a v3 program loads; a v0
-  build of it fails with "Relative jump out of bounds".
-- `build:program` fails if `cargo build-sbf` reports a function whose stack frame passes SBF's
+- The keys and generated clients are committed so readers see them and fresh clones build the same
+  verifier; `xark build --check` fails if one is stale. Rebuild (`xark build`) and commit the
+  result with the circuit change.
+- Treat a circuit's public statement struct (`Append`, `Withdrawal`, `Transaction`) as an API: the
+  program fills it in as the generated `PublicInputs`. A change updates the struct, the program, and
+  the README reference together.
+- Each example is its own xark project (its `xark.toml`, workspace, `package.json`, `tsconfig.json`
+  and `vitest.config.ts`), so one can be copied out alone. The tests' helpers repeat on purpose;
+  keep each to what its example uses.
+- `xark build` fails if `cargo build-sbf` reports a function whose stack frame passes SBF's
   4 KiB, which it only warns about: at run time such a frame silently corrupts the stack (it broke
   token claim's claims, and 01's entrypoint once had a 4,480-byte frame). Keep large buffers
   borrowed from the instruction data, or put a heavy function out of line with `#[inline(never)]`.

@@ -1,0 +1,18 @@
+# The shielded transfer's JoinSplit circuit: an ordinary Rust crate xark compiles
+# to R1CS.
+[package]
+name = "shielded_transact"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+xark = "0.4"
+xark-hash = "0.4"
+xark-poseidon2 = "0.4"
+# 04's tree, as an ordinary crate: the same tree, hash and empty leaf.
+pool = { path = "../../../04-shielded-pool/circuits/pool" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(xark)'] }
